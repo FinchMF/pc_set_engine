@@ -1,3 +1,32 @@
+"""Command-line interface for the pitch class rules engine.
+
+This module provides a user-friendly command-line interface for generating
+musical sequences using the pitch class rules engine. It supports various
+configuration presets, allows customization of randomness parameters,
+and offers options for saving the generated sequences.
+
+The module includes:
+- Preset configurations for different types of sequences (melodic, chordal, etc.)
+- Parameters for controlling randomness and variation
+- Utilities for displaying and saving generated sequences
+- Command-line argument parsing for easy configuration
+
+Examples:
+    Generate a melodic sequence from C to G with default settings:
+    ```bash
+    python run_engine.py --config-type melodic
+    ```
+
+    Generate a chord progression with custom sequence length:
+    ```bash
+    python run_engine.py --config-type chord-progression --sequence-length 6
+    ```
+
+    Generate a highly random melodic sequence and save to file:
+    ```bash
+    python run_engine.py --config-type melodic --randomness 0.8 --output sequence.json
+    ```
+"""
 import json
 import argparse
 import time
@@ -21,17 +50,29 @@ from pc_sets.engine import (
 )
 
 def get_default_config() -> Dict:
-    """Return the default configuration for the pitch class engine."""
+    """Return the default configuration for the pitch class engine.
+    
+    This function provides a copy of the example configuration from the engine
+    module, which can be used as a starting point for creating custom configs.
+    
+    Returns:
+        Dict: A dictionary containing default configuration parameters.
+    """
     logger.debug("Getting default configuration")
     return EXAMPLE_CONFIG.copy()
 
 def get_melodic_config(randomness: float = 0.3, variation: float = 0.4) -> Dict:
-    """
-    Return a configuration for generating a melodic sequence.
+    """Return a configuration for generating a melodic sequence.
+    
+    Creates a configuration for a melodic sequence that progresses from
+    C to G, with customizable randomness parameters.
     
     Args:
-        randomness: Level of randomness (0.0-1.0)
-        variation: Probability of applying variations (0.0-1.0)
+        randomness: Level of randomness from 0.0 (deterministic) to 1.0 (highly random).
+        variation: Probability of applying variations from 0.0 (none) to 1.0 (maximum).
+    
+    Returns:
+        Dict: A dictionary containing configuration parameters for melodic generation.
     """
     logger.debug(f"Creating melodic config with randomness={randomness}, variation={variation}")
     config = get_default_config()
@@ -47,13 +88,17 @@ def get_melodic_config(randomness: float = 0.3, variation: float = 0.4) -> Dict:
     return config
 
 def get_random_walk_melodic_config(randomness: float = 0.5, variation: float = 0.6) -> Dict:
-    """
-    Return a configuration for generating a random walk melodic sequence with 
-    specified randomness levels.
+    """Return a configuration for generating a random walk melodic sequence.
+    
+    Creates a configuration for a melodic sequence that randomly evolves
+    without a specific target, with customizable randomness parameters.
     
     Args:
-        randomness: Level of randomness (0.0-1.0)
-        variation: Probability of applying variations (0.0-1.0)
+        randomness: Level of randomness from 0.0 (predictable) to 1.0 (chaotic).
+        variation: Probability of applying variations from 0.0 (none) to 1.0 (maximum).
+    
+    Returns:
+        Dict: A dictionary containing configuration parameters for random walk generation.
     """
     logger.debug(f"Creating random walk config with randomness={randomness}, variation={variation}")
     config = get_default_config()
@@ -69,7 +114,14 @@ def get_random_walk_melodic_config(randomness: float = 0.5, variation: float = 0
     return config
 
 def get_chord_progression_config() -> Dict:
-    """Return a configuration for generating a chord progression."""
+    """Return a configuration for generating a chord progression.
+    
+    Creates a configuration for a chord progression that moves from
+    C major to G major over a specified number of steps.
+    
+    Returns:
+        Dict: A dictionary containing configuration parameters for chord progression generation.
+    """
     logger.debug("Creating chord progression configuration")
     config = get_default_config()
     config["generation_type"] = "chordal"
@@ -79,7 +131,14 @@ def get_chord_progression_config() -> Dict:
     return config
 
 def get_static_chord_config() -> Dict:
-    """Return a configuration for generating static chords with variations."""
+    """Return a configuration for generating static chords with variations.
+    
+    Creates a configuration for generating a sequence of C minor chords
+    with slight variations between them.
+    
+    Returns:
+        Dict: A dictionary containing configuration parameters for static chord generation.
+    """
     logger.debug("Creating static chord configuration")
     config = get_default_config()
     config["generation_type"] = "chordal"
@@ -89,19 +148,33 @@ def get_static_chord_config() -> Dict:
     return config
 
 def get_random_walk_config() -> Dict:
-    """Return a configuration for generating a random walk melodic sequence."""
+    """Return a configuration for generating a random walk melodic sequence.
+    
+    Convenience function that calls get_random_walk_melodic_config with default parameters.
+    
+    Returns:
+        Dict: A dictionary containing configuration parameters for random walk generation.
+    """
     logger.debug("Creating random walk configuration")
     return get_random_walk_melodic_config()
 
 def run_engine_with_config(config: Dict) -> List[Union[int, List[int]]]:
-    """
-    Run the pitch class engine with the given configuration.
+    """Run the pitch class engine with the given configuration.
+    
+    This function executes the generation process using the provided configuration
+    and measures the execution time.
     
     Args:
-        config: Configuration dictionary
+        config: Configuration dictionary for the generation process.
         
     Returns:
-        Generated sequence
+        List[Union[int, List[int]]]: Generated sequence of pitch classes or lists of pitch classes.
+        
+    Example:
+        ```python
+        config = get_melodic_config()
+        sequence = run_engine_with_config(config)
+        ```
     """
     logger.info("Running engine with configuration")
     start_time = time.time()
@@ -110,13 +183,20 @@ def run_engine_with_config(config: Dict) -> List[Union[int, List[int]]]:
     return result
 
 def save_sequence_to_file(sequence: List[Union[int, List[int]]], filepath: str, config: Dict = None):
-    """
-    Save a generated sequence to a JSON file.
+    """Save a generated sequence to a JSON file.
+    
+    Writes the sequence and optionally the configuration used to generate it
+    to a JSON file at the specified location.
     
     Args:
-        sequence: The generated sequence
-        filepath: Path to save the file
-        config: Optional configuration used to generate the sequence
+        sequence: The generated sequence to save.
+        filepath: Path where the file should be saved.
+        config: Optional configuration used to generate the sequence.
+        
+    Example:
+        ```python
+        save_sequence_to_file(sequence, "output.json", config)
+        ```
     """
     output_data = {
         "sequence": sequence,
@@ -132,12 +212,19 @@ def save_sequence_to_file(sequence: List[Union[int, List[int]]], filepath: str, 
     print(f"Sequence saved to {filepath}")
 
 def display_sequence(sequence: List[Union[int, List[int]]], generation_type: str):
-    """
-    Display a generated sequence in a readable format.
+    """Display a generated sequence in a readable format.
+    
+    Formats and prints the generated sequence to the console, converting
+    numeric pitch classes to their musical note names.
     
     Args:
-        sequence: The generated sequence
-        generation_type: Type of sequence ("melodic" or "chordal")
+        sequence: The generated sequence to display.
+        generation_type: Type of sequence ("melodic" or "chordal").
+        
+    Example:
+        ```python
+        display_sequence([0, 4, 7], "melodic")
+        ```
     """
     pitch_names = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B']
     
@@ -159,7 +246,24 @@ def display_sequence(sequence: List[Union[int, List[int]]], generation_type: str
     print("-----------------")
 
 def main():
-    """Main function to run the pitch class engine with command line arguments."""
+    """Main function to run the pitch class engine with command line arguments.
+    
+    Parses command-line arguments, selects the appropriate configuration,
+    executes the generation process, and handles displaying and saving the results.
+    
+    Command-line arguments:
+        --config-type: Type of configuration to use.
+        --output: Path to save the output JSON file.
+        --randomness: Level of randomness for melodic generation.
+        --variation: Probability of variations for melodic generation.
+        --sequence-length: Length of the generated sequence.
+        --log-level: Logging verbosity level.
+        
+    Example:
+        ```bash
+        python run_engine.py --config-type melodic --randomness 0.5 --output result.json
+        ```
+    """
     logger.info("Starting pitch class rules engine")
     
     parser = argparse.ArgumentParser(description='Run the Pitch Class Engine with different configurations.')

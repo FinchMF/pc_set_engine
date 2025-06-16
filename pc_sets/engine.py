@@ -1,3 +1,45 @@
+"""Pitch class sequence generation engine for melodic and chordal progressions.
+
+This module provides a configurable engine for generating musical sequences based on
+pitch class theory. It supports both melodic (single-note) sequences and chordal
+(multi-note) progressions with varying levels of randomness and directed transformations.
+
+The module offers three primary types of progression:
+- Directed: Transformation from a starting pitch class (set) to a target
+- Random: Stochastic generation with controllable randomness
+- Static: Repeated or slightly varied sequences
+
+Key features include:
+- Configuration-driven generation pipeline
+- Controlled randomness and variation
+- Multiple transformation operations (transpose, invert, add/remove notes, etc.)
+- Musical contour enhancement for melodies
+- Detailed logging for debugging and analysis
+
+Examples:
+    Basic melodic sequence from C to G:
+    ```python
+    config = {
+        "start_pc": 0,  # C
+        "target_pc": 7,  # G
+        "generation_type": "melodic",
+        "progression": True
+    }
+    sequence = generate_sequence_from_config(config)
+    ```
+
+    Chord progression from C major to G major:
+    ```python
+    config = {
+        "start_pc": [0, 4, 7],  # C major
+        "target_pc": [7, 11, 2],  # G major
+        "generation_type": "chordal",
+        "progression": True,
+        "sequence_length": 4
+    }
+    sequence = generate_sequence_from_config(config)
+    ```
+"""
 from typing import List, Dict, Union, Optional, Tuple, Any
 import random
 import json
@@ -17,17 +59,54 @@ logger = get_logger(__name__)
 from .pitch_classes import PitchClass, PitchClassSet, COMMON_SETS
 
 class GenerationType(Enum):
+    """Enumeration of supported generation types.
+    
+    Defines whether the engine should generate a single-note melody
+    or a sequence of chords.
+    
+    Attributes:
+        MELODIC: Generate a sequence of individual pitch classes.
+        CHORDAL: Generate a sequence of pitch class sets (chords).
+    """
     MELODIC = "melodic"
     CHORDAL = "chordal"
 
 class ProgressionType(Enum):
+    """Enumeration of supported progression types.
+    
+    Defines how the sequence should evolve over time.
+    
+    Attributes:
+        STATIC: Generate a sequence with minimal change.
+        DIRECTED: Generate a sequence that moves toward a specific target.
+        RANDOM: Generate a sequence with stochastic evolution.
+    """
     STATIC = "static"
     DIRECTED = "directed"
     RANDOM = "random"
 
 @dataclass
 class GenerationConfig:
-    """Configuration for the pitch class generation pipeline."""
+    """Configuration for the pitch class generation pipeline.
+    
+    This class encapsulates all parameters needed to control the sequence
+    generation process, including starting and target pitch classes,
+    randomness controls, and constraints.
+    
+    Attributes:
+        start_pc: Starting pitch class(es) for the sequence.
+        generation_type: Whether to generate melodic or chordal sequences.
+        sequence_length: Number of elements to generate.
+        progression: Whether the sequence should progress/transform.
+        target_pc: Target pitch class(es) for directed progressions.
+        transformation_steps: Number of steps to transform from start to target.
+        progression_type: Type of progression (static, directed, random).
+        allowed_operations: List of transformation operations to allow.
+        constraints: Dictionary of constraints to apply to generation.
+        style_profile: Optional style profile to influence generation.
+        randomness_factor: Level of randomness (0.0-1.0).
+        variation_probability: Probability of applying variations (0.0-1.0).
+    """
     start_pc: Union[int, List[int]]  # Starting pitch class or set
     generation_type: GenerationType  # Melodic or chordal
     sequence_length: int = 8  # Length of the sequence to generate
@@ -42,6 +121,18 @@ class GenerationConfig:
     variation_probability: float = 0.3  # Probability of applying variations
     
     def __post_init__(self):
+        """Initialize derived attributes and validate configuration.
+        
+        Performs the following operations:
+        - Converts string enums to their proper enum types
+        - Sets default allowed operations if none provided
+        - Sets default constraints if none provided
+        - Validates that target is provided for directed progressions
+        - Clamps randomness parameters to valid ranges
+        
+        Raises:
+            ValueError: If target_pc is missing for a directed progression.
+        """
         # Convert string values to enums
         if isinstance(self.generation_type, str):
             self.generation_type = GenerationType(self.generation_type.lower())
@@ -72,16 +163,25 @@ class GenerationConfig:
 
 
 class PitchClassEngine:
-    """
-    Engine for generating melodic or chordal sequences based on pitch classes.
+    """Engine for generating melodic or chordal sequences based on pitch classes.
+    
+    This class implements the core functionality for generating pitch class
+    sequences according to a provided configuration. It supports both melodic
+    and chordal generation with various progression types and transformation
+    operations.
+    
+    Attributes:
+        config: The generation configuration.
+        start_pcs: The starting pitch class set.
+        target_pcs: The target pitch class set (if applicable).
     """
     
     def __init__(self, config: Union[GenerationConfig, Dict]):
-        """
-        Initialize the engine with a configuration.
+        """Initialize the engine with a configuration.
         
         Args:
-            config: Configuration for the generation process.
+            config: Configuration for the generation process, either as a
+                GenerationConfig object or a dictionary of parameters.
         """
         if isinstance(config, dict):
             self.config = GenerationConfig(**config)
@@ -116,11 +216,19 @@ class PitchClassEngine:
             logger.debug(f"Using default transformation steps: {self.config.transformation_steps}")
     
     def generate(self) -> List[Union[int, List[int]]]:
-        """
-        Generate a sequence based on the configuration.
+        """Generate a sequence based on the configuration.
+        
+        Delegates to the appropriate generator method based on the configured
+        generation type (melodic or chordal).
         
         Returns:
-            A list of pitch classes (for melodic) or pitch class sets (for chordal).
+            A list of pitch classes (for melodic) or lists of pitch classes (for chordal).
+            
+        Example:
+            ```
+            engine = PitchClassEngine(config)
+            sequence = engine.generate()
+            ```
         """
         start_time = time.time()
         
@@ -136,8 +244,11 @@ class PitchClassEngine:
         return result
     
     def _generate_melodic(self) -> List[int]:
-        """
-        Generate a melodic sequence.
+        """Generate a melodic sequence.
+        
+        Creates a sequence of individual pitch classes based on the configured
+        progression type, randomness, and constraints. Implements directed,
+        random, and static progression types.
         
         Returns:
             A list of pitch classes representing the melody.
@@ -237,12 +348,14 @@ class PitchClassEngine:
         return sequence
     
     def _enhance_melodic_contour(self, sequence: List[int]) -> None:
-        """
-        Enhance the musicality of a melodic sequence by adjusting its contour.
-        This is an in-place operation.
+        """Enhance the musicality of a melodic sequence by adjusting its contour.
+        
+        Modifies the sequence in-place to improve its melodic contour by
+        addressing patterns that might be unmusical, such as consecutive large
+        leaps in the same direction.
         
         Args:
-            sequence: The melodic sequence to enhance
+            sequence: The melodic sequence to enhance.
         """
         # Don't process very short sequences
         if len(sequence) <= 3:
@@ -272,11 +385,14 @@ class PitchClassEngine:
                         sequence[i+1] = (current_pc + (1 if next_pc > current_pc else -1)) % 12
 
     def _generate_chordal(self) -> List[List[int]]:
-        """
-        Generate a chord progression.
+        """Generate a chord progression.
+        
+        Creates a sequence of pitch class sets (chords) based on the configured
+        progression type, allowed operations, and constraints.
         
         Returns:
-            A list of pitch class sets representing the chords.
+            A list of lists, where each inner list contains the pitch classes
+            of a chord in the progression.
         """
         # Get the initial chord
         current_pcs = self.start_pcs
@@ -329,17 +445,21 @@ class PitchClassEngine:
         step: int, 
         total_steps: int
     ) -> PitchClassSet:
-        """
-        Transform a pitch class set toward a target pitch class set.
+        """Transform a pitch class set toward a target pitch class set.
+        
+        Intelligently selects and applies transformations that move the
+        current pitch class set closer to the target. The operation selection
+        depends on the allowed operations and the differences between current
+        and target sets.
         
         Args:
-            current: The current pitch class set
-            target: The target pitch class set
-            step: Current step number
-            total_steps: Total number of steps
+            current: The current pitch class set.
+            target: The target pitch class set.
+            step: Current step number in the progression.
+            total_steps: Total number of steps in the progression.
             
         Returns:
-            A new pitch class set that's one step closer to the target
+            A new pitch class set that's one step closer to the target.
         """
         # Determine which operation to apply
         operations = self.config.allowed_operations
@@ -410,14 +530,20 @@ class PitchClassEngine:
         return self._apply_minor_variation(current)
     
     def _apply_random_transformation(self, pcs: PitchClassSet) -> PitchClassSet:
-        """
-        Apply a random transformation to a pitch class set.
+        """Apply a random transformation to a pitch class set.
+        
+        Selects a transformation operation from the allowed operations and
+        applies it to the provided pitch class set.
         
         Args:
-            pcs: The pitch class set to transform
+            pcs: The pitch class set to transform.
             
         Returns:
-            A transformed pitch class set
+            A transformed pitch class set.
+            
+        Note:
+            If the chosen operation cannot be applied (e.g., trying to remove
+            a note from a singleton), the original set is returned unchanged.
         """
         operation = random.choice(self.config.allowed_operations)
         logger.debug(f"Applying random transformation: {operation}")
@@ -470,14 +596,17 @@ class PitchClassEngine:
         return pcs
     
     def _apply_minor_variation(self, pcs: PitchClassSet) -> PitchClassSet:
-        """
-        Apply a minor variation to a pitch class set.
+        """Apply a minor variation to a pitch class set.
+        
+        Makes small changes to the pitch class set such as shifting by a
+        small interval, substituting one note, or adding/removing a note.
+        Has a chance to return the original set unchanged.
         
         Args:
-            pcs: The pitch class set to vary
+            pcs: The pitch class set to vary.
             
         Returns:
-            A slightly varied pitch class set
+            A slightly varied pitch class set or the original.
         """
         # 50% chance to return the original
         if random.random() < 0.5:
@@ -522,14 +651,27 @@ class PitchClassEngine:
 
 
 def generate_sequence_from_config(config_data: Dict) -> List[Union[int, List[int]]]:
-    """
-    Generate a sequence from a configuration dictionary.
+    """Generate a sequence from a configuration dictionary.
+    
+    Convenience function that creates a PitchClassEngine with the given
+    configuration and generates a sequence.
     
     Args:
-        config_data: Configuration for the generation
+        config_data: Configuration dictionary for the generation process.
         
     Returns:
-        Generated sequence of pitch classes or pitch class sets
+        Generated sequence of pitch classes or pitch class sets.
+        
+    Example:
+        ```
+        config = {
+            "start_pc": 0,  # C
+            "target_pc": 7,  # G
+            "generation_type": "melodic",
+            "progression": True
+        }
+        sequence = generate_sequence_from_config(config)
+        ```
     """
     logger.info("Generating sequence from configuration")
     engine = PitchClassEngine(config_data)

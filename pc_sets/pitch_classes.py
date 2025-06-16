@@ -1,3 +1,32 @@
+"""Pitch class set theory implementation for music analysis and generation.
+
+This module provides classes and utilities for working with pitch classes and pitch class sets
+in post-tonal music theory. It supports operations such as:
+- Pitch class creation and manipulation
+- Pitch class set creation and analysis
+- Normal form and prime form calculation
+- Forte number identification
+- Interval vector calculation
+- Set operations (transpose, invert, complement, etc.)
+
+Common pitch class sets like triads, seventh chords, and scales are provided
+in the COMMON_SETS dictionary for convenience.
+
+Examples:
+    Create and analyze a C minor 7th chord:
+    ```
+    cm7 = PitchClassSet([0, 3, 7, 10])
+    print(cm7.forte_number)  # "4-26"
+    print(cm7.interval_vector)  # [0, 1, 1, 1, 2, 1]
+    ```
+
+    Transform a chord:
+    ```
+    cmaj = PitchClassSet([0, 4, 7])  # C major
+    fmaj = cmaj.transpose(5)  # Transpose to F major
+    cmaj_inv = cmaj.invert()  # Invert the C major chord
+    ```
+"""
 import numpy as np
 from typing import List, Dict, Tuple, Set, Optional, Union
 import time
@@ -12,40 +41,102 @@ from utils import get_logger, log_execution_time
 logger = get_logger(__name__)
 
 class PitchClass:
-    """
-    A class representing a single pitch class from 0-11 (C-B).
+    """A class representing a single pitch class from 0-11 (C-B).
+    
+    Pitch classes represent the twelve distinct notes in traditional Western music,
+    independent of their octave. The values 0-11 represent C through B.
+    
+    Attributes:
+        pc (int): The pitch class value (0-11).
+        PITCH_CLASS_NAMES (List[str]): Class attribute mapping pitch class numbers to name strings.
     """
     PITCH_CLASS_NAMES = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 
                          'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B']
     
     def __init__(self, pc: int):
+        """Initialize a pitch class.
+        
+        Args:
+            pc (int): The pitch class value (will be normalized to 0-11 using modulo 12).
+        """
         self.pc = pc % 12
     
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """Get the string representation of the pitch class.
+        
+        Returns:
+            str: A string showing the pitch class value and name.
+        """
         return f"PC({self.pc}: {self.PITCH_CLASS_NAMES[self.pc]})"
     
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
+        """Check if this pitch class equals another.
+        
+        Args:
+            other: Another PitchClass or an integer.
+            
+        Returns:
+            bool: True if the pitch classes are equal, False otherwise.
+        """
         if isinstance(other, PitchClass):
             return self.pc == other.pc
         return self.pc == other
     
-    def __hash__(self):
+    def __hash__(self) -> int:
+        """Get the hash value for this pitch class.
+        
+        Returns:
+            int: Hash value.
+        """
         return hash(self.pc)
     
     def transpose(self, n: int) -> 'PitchClass':
+        """Transpose this pitch class by n semitones.
+        
+        Args:
+            n (int): The number of semitones to transpose by.
+            
+        Returns:
+            PitchClass: A new PitchClass object representing the transposed value.
+        """
         return PitchClass((self.pc + n) % 12)
     
     def invert(self, axis: int = 0) -> 'PitchClass':
+        """Invert this pitch class around a specified axis.
+        
+        Args:
+            axis (int, optional): The axis of inversion (default is 0, which is C).
+            
+        Returns:
+            PitchClass: A new PitchClass object representing the inverted value.
+        """
         return PitchClass((axis * 2 - self.pc) % 12)
 
 
 class PitchClassSet:
-    """
-    A class representing a set of pitch classes.
+    """A class representing a set of pitch classes.
+    
+    This class implements pitch class set theory operations, providing methods
+    for analyzing and manipulating collections of pitch classes. Features include
+    normal form and prime form calculation, Forte number identification, and
+    interval vector calculation.
+    
+    Attributes:
+        pcs (Set[PitchClass]): The set of pitch class objects.
+        _normal_form (List[int], optional): Cached normal form.
+        _prime_form (List[int], optional): Cached prime form.
+        _forte_number (str, optional): Cached Forte number.
+        _interval_vector (List[int], optional): Cached interval vector.
     """
     _FORTE_CATALOG = {}  # This will be populated with the Forte catalog data
     
     def __init__(self, pcs: Union[List[int], Set[int], Tuple[int, ...], np.ndarray]):
+        """Initialize a pitch class set.
+        
+        Args:
+            pcs (Union[List[int], Set[int], Tuple[int, ...], np.ndarray]): A collection of pitch class values
+            (0-11) representing the pitch class set. This can be a list, set, tuple, or numpy array.
+        """
         # Convert all inputs to a set of PitchClass objects
         if isinstance(pcs, np.ndarray):
             pcs = pcs.tolist()
@@ -77,15 +168,23 @@ class PitchClassSet:
 
     @property
     def cardinality(self) -> int:
-        """
-        Returns the cardinality (number of pitch classes) of the set.
+        """Get the cardinality (number of pitch classes) of the set.
+        
+        Returns:
+            int: The number of pitch classes in the set.
         """
         return len(self.pcs)
     
     @property
     def normal_form(self) -> List[int]:
-        """
-        Returns the normal form of the pitch class set.
+        """Calculate and return the normal form of the pitch class set.
+        
+        The normal form is the most "compact" arrangement of the pitch classes,
+        starting with the smallest possible interval from the first to last pitch class.
+        Results are cached for efficiency.
+        
+        Returns:
+            List[int]: The pitch classes in normal form.
         """
         start_time = time.time()
         
@@ -122,8 +221,14 @@ class PitchClassSet:
     
     @property
     def prime_form(self) -> List[int]:
-        """
-        Returns the prime form of the pitch class set (starting from 0).
+        """Calculate and return the prime form of the pitch class set.
+        
+        The prime form is the most compact arrangement of the pitch class set,
+        comparing both the normal form and its inversion and selecting the most
+        compact version. Prime form is used for classification and comparison of sets.
+        
+        Returns:
+            List[int]: The pitch classes in prime form.
         """
         if self._prime_form is not None:
             return self._prime_form
@@ -161,8 +266,14 @@ class PitchClassSet:
     
     @property
     def forte_number(self) -> str:
-        """
-        Returns the Forte number of the pitch class set.
+        """Get the Forte number for this pitch class set.
+        
+        The Forte number is a standard classification system for pitch class sets
+        in post-tonal theory. It consists of the cardinality followed by a dash and
+        a unique identifier (e.g., "3-11" for a major or minor triad).
+        
+        Returns:
+            str: The Forte number, or "Unknown" if not found in the catalog.
         """
         if self._forte_number is not None:
             return self._forte_number
@@ -179,8 +290,14 @@ class PitchClassSet:
     
     @property
     def interval_vector(self) -> List[int]:
-        """
-        Returns the interval vector of the pitch class set.
+        """Calculate the interval vector of the pitch class set.
+        
+        The interval vector is a 6-element array showing the frequency of each
+        interval class (1-6) in the pitch class set. This provides a measure of
+        the "sound" of the set independent of specific pitch classes.
+        
+        Returns:
+            List[int]: The interval vector with 6 elements.
         """
         if self._interval_vector is not None:
             return self._interval_vector
@@ -200,8 +317,10 @@ class PitchClassSet:
     
     @classmethod
     def _init_forte_catalog(cls):
-        """
-        Initialize the Forte catalog with the mapping from prime forms to Forte numbers.
+        """Initialize the Forte catalog with mappings from prime forms to Forte numbers.
+        
+        This is an internal method that populates the _FORTE_CATALOG dictionary
+        used for identifying pitch class sets by their standard names.
         """
         logger.info("Initializing Forte catalog")
         # This is a simplified version; the full catalog would be more extensive
@@ -273,62 +392,112 @@ class PitchClassSet:
         logger.info("Forte catalog initialized")
     
     def transpose(self, n: int) -> 'PitchClassSet':
-        """
-        Transpose the pitch class set by n semitones.
+        """Transpose the pitch class set by n semitones.
+        
+        Args:
+            n (int): The number of semitones to transpose by.
+            
+        Returns:
+            PitchClassSet: A new PitchClassSet object representing the transposed set.
         """
         return PitchClassSet([((pc.pc + n) % 12) for pc in self.pcs])
     
     def invert(self, axis: int = 0) -> 'PitchClassSet':
-        """
-        Invert the pitch class set around the specified axis.
+        """Invert the pitch class set around a specified axis.
+        
+        Args:
+            axis (int, optional): The axis of inversion (default is 0, which is C).
+            
+        Returns:
+            PitchClassSet: A new PitchClassSet object representing the inverted set.
         """
         return PitchClassSet([((axis * 2 - pc.pc) % 12) for pc in self.pcs])
     
     def complement(self) -> 'PitchClassSet':
-        """
-        Return the complement of the pitch class set.
+        """Get the complement of the pitch class set.
+        
+        The complement contains all pitch classes not in the original set.
+        
+        Returns:
+            PitchClassSet: A new PitchClassSet object representing the complement.
         """
         current_pcs = {pc.pc for pc in self.pcs}
         complement_pcs = {pc for pc in range(12) if pc not in current_pcs}
         return PitchClassSet(complement_pcs)
     
     def is_subset(self, other: 'PitchClassSet') -> bool:
-        """
-        Check if this set is a subset of another pitch class set.
+        """Check if this set is a subset of another pitch class set.
+        
+        Args:
+            other (PitchClassSet): Another pitch class set.
+            
+        Returns:
+            bool: True if this is a subset of other, False otherwise.
         """
         return all(pc in other.pcs for pc in self.pcs)
     
     def is_superset(self, other: 'PitchClassSet') -> bool:
-        """
-        Check if this set is a superset of another pitch class set.
+        """Check if this set is a superset of another pitch class set.
+        
+        Args:
+            other (PitchClassSet): Another pitch class set.
+            
+        Returns:
+            bool: True if this is a superset of other, False otherwise.
         """
         return all(pc in self.pcs for pc in other.pcs)
     
     def intersection(self, other: 'PitchClassSet') -> 'PitchClassSet':
-        """
-        Return the intersection of this set with another pitch class set.
+        """Get the intersection of this set with another pitch class set.
+        
+        Args:
+            other (PitchClassSet): Another pitch class set.
+            
+        Returns:
+            PitchClassSet: A new PitchClassSet containing elements in both sets.
         """
         return PitchClassSet([pc.pc for pc in self.pcs if pc in other.pcs])
     
     def union(self, other: 'PitchClassSet') -> 'PitchClassSet':
-        """
-        Return the union of this set with another pitch class set.
+        """Get the union of this set with another pitch class set.
+        
+        Args:
+            other (PitchClassSet): Another pitch class set.
+            
+        Returns:
+            PitchClassSet: A new PitchClassSet containing elements from either set.
         """
         return PitchClassSet([pc.pc for pc in self.pcs] + [pc.pc for pc in other.pcs])
     
     def is_z_related(self, other: 'PitchClassSet') -> bool:
-        """
-        Check if this set is Z-related to another pitch class set.
-        (Same interval vector but different prime form)
+        """Check if this set is Z-related to another pitch class set.
+        
+        Z-related sets have the same interval vector but different prime forms,
+        meaning they have the same intervallic content but different structures.
+        
+        Args:
+            other (PitchClassSet): Another pitch class set.
+            
+        Returns:
+            bool: True if the sets are Z-related, False otherwise.
         """
         return (self.interval_vector == other.interval_vector and 
                 self.prime_form != other.prime_form)
 
     @classmethod
     def from_name(cls, name: str) -> 'PitchClassSet':
-        """
-        Create a pitch class set from a string of note names.
-        Example: 'C E G' for a C major chord.
+        """Create a pitch class set from a string of note names.
+        
+        Args:
+            name (str): Space-separated note names (e.g., "C E G").
+            
+        Returns:
+            PitchClassSet: A new PitchClassSet containing the specified notes.
+            
+        Example:
+            ```
+            cmaj = PitchClassSet.from_name("C E G")
+            ```
         """
         note_to_pc = {
             'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
