@@ -1,0 +1,4 @@
+.env/
+logs/
+output.json
+__pycache__
