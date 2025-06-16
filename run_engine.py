@@ -48,6 +48,7 @@ from pc_sets.engine import (
     GenerationType,
     ProgressionType
 )
+from midi import sequence_to_midi
 
 def get_default_config() -> Dict:
     """Return the default configuration for the pitch class engine.
@@ -246,24 +247,7 @@ def display_sequence(sequence: List[Union[int, List[int]]], generation_type: str
     print("-----------------")
 
 def main():
-    """Main function to run the pitch class engine with command line arguments.
-    
-    Parses command-line arguments, selects the appropriate configuration,
-    executes the generation process, and handles displaying and saving the results.
-    
-    Command-line arguments:
-        --config-type: Type of configuration to use.
-        --output: Path to save the output JSON file.
-        --randomness: Level of randomness for melodic generation.
-        --variation: Probability of variations for melodic generation.
-        --sequence-length: Length of the generated sequence.
-        --log-level: Logging verbosity level.
-        
-    Example:
-        ```bash
-        python run_engine.py --config-type melodic --randomness 0.5 --output result.json
-        ```
-    """
+    """Main function to run the pitch class engine with command line arguments."""
     logger.info("Starting pitch class rules engine")
     
     parser = argparse.ArgumentParser(description='Run the Pitch Class Engine with different configurations.')
@@ -273,6 +257,8 @@ def main():
     ], default='default', help='Type of configuration to use')
     
     parser.add_argument('--output', '-o', type=str, help='Path to save the output JSON')
+    
+    parser.add_argument('--midi', '-m', type=str, help='Path to save the output MIDI file')
     
     parser.add_argument('--randomness', '-r', type=float, default=0.3, 
                       help='Level of randomness (0.0-1.0) for melodic generation')
@@ -285,6 +271,12 @@ def main():
     
     parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                       default='INFO', help='Set the logging level')
+    
+    parser.add_argument('--tempo', type=int, default=120,
+                      help='Tempo in BPM for MIDI generation')
+    
+    parser.add_argument('--base-octave', type=int, default=4,
+                      help='Base octave for MIDI generation (4 = middle C)')
     
     args = parser.parse_args()
     
@@ -322,9 +314,24 @@ def main():
     generation_type = config.get("generation_type", "melodic")
     display_sequence(sequence, generation_type)
     
-    # Save to file if requested
+    # Save to JSON file if requested
     if args.output:
         save_sequence_to_file(sequence, args.output, config)
+    
+    # Generate MIDI file if requested
+    if args.midi:
+        is_melodic = generation_type.lower() == "melodic"
+        midi_params = {
+            "tempo": args.tempo,
+            "base_octave": args.base_octave,
+            "note_duration": 0.5,  # Default to half-second notes
+        }
+        try:
+            midi_path = sequence_to_midi(sequence, args.midi, is_melodic=is_melodic, params=midi_params)
+            print(f"MIDI file saved to {midi_path}")
+        except Exception as e:
+            logger.error(f"Failed to create MIDI file: {e}")
+            print(f"Error creating MIDI file: {str(e)}")
     
     logger.info("Engine execution completed")
 
