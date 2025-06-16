@@ -1,0 +1,30 @@
+# Configuration for jazz-like chord progression with 7th chords
+
+# Generation properties
+generation_type: chordal
+start_pc: [0, 4, 7, 11]  # Cmaj7
+progression: true
+progression_type: random
+sequence_length: 8
+
+# Transformation control
+allowed_operations:
+  - transpose
+  - substitute_note
+
+# Randomness controls
+randomness_factor: 0.6
+variation_probability: 0.7
+
+# Constraints
+constraints:
+  vary_chord: true
+  maintain_cardinality: true
+
+# MIDI properties
+midi_properties:
+  tempo: 90
+  base_octave: 4
+  note_duration: 1.0
+  velocity: 65
+  channel: 0

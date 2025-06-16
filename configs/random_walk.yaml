@@ -1,0 +1,24 @@
+# Configuration for a random walk melodic sequence
+
+# Generation properties
+generation_type: melodic
+start_pc: 0  # C
+progression: true
+progression_type: random
+sequence_length: 16
+
+# Randomness controls
+randomness_factor: 0.7
+variation_probability: 0.8
+
+# Constraints
+constraints:
+  max_interval: 6
+  vary_pc: true
+
+# MIDI properties
+midi_properties:
+  tempo: 120
+  base_octave: 4
+  note_duration: 0.25
+  velocity: 75

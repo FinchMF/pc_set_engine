@@ -1,0 +1,25 @@
+# Basic configuration for melodic sequence generation
+
+# Generation properties
+generation_type: melodic
+start_pc: 0  # C
+target_pc: 7  # G
+progression: true
+progression_type: directed
+sequence_length: 8
+
+# Randomness controls
+randomness_factor: 0.3
+variation_probability: 0.4
+
+# Constraints
+constraints:
+  max_interval: 4
+  vary_pc: true
+
+# MIDI properties
+midi_properties:
+  tempo: 100
+  base_octave: 4
+  note_duration: 0.5
+  velocity: 80

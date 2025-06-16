@@ -1,0 +1,22 @@
+# Configuration for static C minor chords with variations
+
+# Generation properties
+generation_type: chordal
+start_pc: [0, 3, 7]  # C minor
+progression: false
+sequence_length: 6
+
+# Randomness controls
+randomness_factor: 0.3
+variation_probability: 0.5
+
+# Constraints
+constraints:
+  vary_chord: true
+
+# MIDI properties
+midi_properties:
+  tempo: 60
+  base_octave: 3
+  note_duration: 2.0
+  velocity: 85

@@ -1,0 +1,27 @@
+# Configuration for chord progression from C major to G major
+
+# Generation properties
+generation_type: chordal
+start_pc: [0, 4, 7]  # C major
+target_pc: [7, 11, 2]  # G major
+progression: true
+progression_type: directed
+sequence_length: 8
+
+# Transformation control
+allowed_operations:
+  - transpose
+  - substitute_note
+  - add_note
+  - remove_note
+
+# Randomness controls
+randomness_factor: 0.2
+variation_probability: 0.3
+
+# MIDI properties
+midi_properties:
+  tempo: 80
+  base_octave: 3
+  note_duration: 0.75
+  velocity: 70

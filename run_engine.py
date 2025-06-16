@@ -33,6 +33,7 @@ import time
 from typing import Dict, List, Union
 from pathlib import Path
 import sys
+import yaml  # Added import for YAML support
 
 # Add the parent directory to sys.path to ensure module imports work correctly
 sys.path.insert(0, str(Path(__file__).parent))
@@ -246,11 +247,41 @@ def display_sequence(sequence: List[Union[int, List[int]]], generation_type: str
     
     print("-----------------")
 
+def load_config_from_yaml(filepath: str) -> Dict:
+    """Load configuration from a YAML file.
+    
+    Args:
+        filepath: Path to the YAML configuration file.
+        
+    Returns:
+        Dict: Configuration dictionary loaded from the YAML file.
+        
+    Raises:
+        FileNotFoundError: If the specified file does not exist.
+        yaml.YAMLError: If the file is not valid YAML.
+    """
+    logger.info(f"Loading configuration from {filepath}")
+    try:
+        with open(filepath, 'r') as f:
+            config = yaml.safe_load(f)
+        logger.debug(f"Loaded configuration: {config}")
+        return config
+    except FileNotFoundError:
+        logger.error(f"Configuration file not found: {filepath}")
+        raise
+    except yaml.YAMLError as e:
+        logger.error(f"Error parsing YAML file: {e}")
+        raise
+
 def main():
     """Main function to run the pitch class engine with command line arguments."""
     logger.info("Starting pitch class rules engine")
     
     parser = argparse.ArgumentParser(description='Run the Pitch Class Engine with different configurations.')
+    
+    # Add config file option
+    parser.add_argument('--config-file', type=str, 
+                      help='Path to YAML configuration file')
     
     parser.add_argument('--config-type', choices=[
         'default', 'melodic', 'chord-progression', 'static-chord', 'random-walk'
@@ -287,25 +318,46 @@ def main():
     
     logger.info(f"Command-line arguments: {args}")
     
-    # Clamp randomness and variation values between 0 and 1
-    randomness = max(0.0, min(1.0, args.randomness))
-    variation = max(0.0, min(1.0, args.variation))
-    
-    # Select the appropriate configuration
-    if args.config_type == 'melodic':
-        config = get_melodic_config(randomness=randomness, variation=variation)
-    elif args.config_type == 'chord-progression':
-        config = get_chord_progression_config()
-    elif args.config_type == 'static-chord':
-        config = get_static_chord_config()
-    elif args.config_type == 'random-walk':
-        config = get_random_walk_melodic_config(randomness=randomness, variation=variation)
-    else:  # default
-        config = get_default_config()
-    
-    # Set the sequence length if provided
-    if args.sequence_length:
-        config["sequence_length"] = args.sequence_length
+    # Load configuration from YAML file if specified
+    if args.config_file:
+        try:
+            config = load_config_from_yaml(args.config_file)
+            # Allow command-line arguments to override file configuration
+            if args.sequence_length:
+                config["sequence_length"] = args.sequence_length
+            # Extract MIDI properties if present
+            midi_params = config.pop("midi_properties", {})
+        except Exception as e:
+            logger.error(f"Failed to load configuration file: {e}")
+            print(f"Error loading configuration file: {e}")
+            sys.exit(1)
+    else:
+        # Clamp randomness and variation values between 0 and 1
+        randomness = max(0.0, min(1.0, args.randomness))
+        variation = max(0.0, min(1.0, args.variation))
+        
+        # Select the appropriate configuration based on command-line arguments
+        if args.config_type == 'melodic':
+            config = get_melodic_config(randomness=randomness, variation=variation)
+        elif args.config_type == 'chord-progression':
+            config = get_chord_progression_config()
+        elif args.config_type == 'static-chord':
+            config = get_static_chord_config()
+        elif args.config_type == 'random-walk':
+            config = get_random_walk_melodic_config(randomness=randomness, variation=variation)
+        else:  # default
+            config = get_default_config()
+        
+        # Set the sequence length if provided
+        if args.sequence_length:
+            config["sequence_length"] = args.sequence_length
+            
+        # Default MIDI parameters from command line arguments
+        midi_params = {
+            "tempo": args.tempo,
+            "base_octave": args.base_octave,
+            "note_duration": 0.5,
+        }
     
     # Run the engine with the selected configuration
     sequence = run_engine_with_config(config)
@@ -321,11 +373,6 @@ def main():
     # Generate MIDI file if requested
     if args.midi:
         is_melodic = generation_type.lower() == "melodic"
-        midi_params = {
-            "tempo": args.tempo,
-            "base_octave": args.base_octave,
-            "note_duration": 0.5,  # Default to half-second notes
-        }
         try:
             midi_path = sequence_to_midi(sequence, args.midi, is_melodic=is_melodic, params=midi_params)
             print(f"MIDI file saved to {midi_path}")
