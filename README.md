@@ -42,6 +42,7 @@ pc_rules_engine/
 │   ├── __init__.py
 │   └── logging_setup.py   # Logging configuration
 ├── run_engine.py          # Command-line interface
+├── monte_carlo.py         # Monte Carlo simulation framework
 └── README.md              # This documentation
 ```
 
@@ -112,6 +113,17 @@ python run_engine.py --config-file configs/melodic_basic.yaml --sequence-length 
 - Supports direct MIDI file generation
 - Support for YAML configuration files
 
+### Monte Carlo Simulator (`monte_carlo.py`)
+
+- Run large-scale simulations with systematically varied parameters
+- Generate datasets of sequences for analysis and experimentation
+- Two main modes of operation:
+  - General Monte Carlo: Random parameter exploration
+  - Parameter Variation: Systematic study of specific parameter effects
+- Support for parallel processing to speed up large simulations
+- Statistical analysis of generated sequences
+- Export data to JSON and CSV for further analysis
+
 ## Usage Examples
 
 ### Using YAML Configuration Files
@@ -166,6 +178,41 @@ sequence = generate_sequence_from_config(config)
 # Convert to MIDI
 from midi.translator import sequence_to_midi
 sequence_to_midi(sequence, "progression.mid", is_melodic=False)
+```
+
+### Running Monte Carlo Simulations
+
+```bash
+# Run a basic Monte Carlo simulation with 100 iterations
+python monte_carlo.py --num-simulations 100
+
+# Use a specific base configuration file
+python monte_carlo.py --num-simulations 50 --base-config configs/melodic_basic.yaml
+
+# Run a parameter variation study
+python monte_carlo.py --variation-mode --param-name randomness_factor --param-min 0.1 --param-max 0.9 --param-steps 9 --base-config configs/chord_progression.yaml
+```
+
+Analyzing the results:
+
+```python
+import json
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load the Monte Carlo dataset
+with open('datasets/monte_carlo_dataset.json', 'r') as f:
+    data = json.load(f)
+
+# Load the statistics CSV into a pandas DataFrame
+stats = pd.read_csv('datasets/monte_carlo_stats.csv')
+
+# Plot the relationship between randomness factor and interval size
+plt.scatter(stats['randomness_factor'], stats['mean_interval'])
+plt.xlabel('Randomness Factor')
+plt.ylabel('Mean Interval Size')
+plt.title('Effect of Randomness on Interval Size')
+plt.savefig('randomness_vs_intervals.png')
 ```
 
 ## Advanced Examples
@@ -224,6 +271,46 @@ sequence_to_midi_with_rhythm(sequence, 'melody_rhythmic.mid', rhythm, is_melodic
 "
 ```
 
+### Large-Scale Parameter Exploration
+
+```python
+from monte_carlo import MonteCarloSimulator
+
+# Create a simulator with custom parameter ranges
+simulator = MonteCarloSimulator(
+    num_simulations=200,
+    base_config_file="configs/melodic_basic.yaml",
+    param_ranges={
+        "randomness_factor": (0.0, 1.0),
+        "variation_probability": (0.0, 1.0),
+        "sequence_length": (4, 24)
+    },
+    output_dir="exploration_results"
+)
+
+# Run the simulation with parallel processing
+dataset = simulator.run(parallel=True, max_workers=8)
+
+# Save the dataset and export statistics
+simulator.save_dataset("full_exploration.json")
+simulator.export_stats_to_csv("exploration_stats.csv")
+```
+
+### Studying the Effect of a Single Parameter
+
+```python
+from monte_carlo import generate_variations_dataset
+
+# Study how randomness affects melodic contour
+generate_variations_dataset(
+    base_config_file="configs/melodic_basic.yaml",
+    param_name="randomness_factor",
+    values=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+    samples_per_value=5,
+    output_dir="randomness_study"
+)
+```
+
 ## Logging
 
 The system includes a comprehensive logging mechanism to track operations and debug issues. Logs are written to both console and files in the `logs/` directory.
@@ -244,6 +331,7 @@ The modular design allows for easy extension:
 2. Create new preset configurations in the `configs/` directory
 3. Extend `PitchClassSet` with additional music theory concepts in `pitch_classes.py`
 4. Add new MIDI features in `midi/translator.py`
+5. Add custom analysis metrics to `MonteCarloSimulator._analyze_sequence()`
 
 ## Requirements
 
@@ -251,3 +339,6 @@ The modular design allows for easy extension:
 - NumPy
 - Mido (for MIDI generation)
 - PyYAML (for configuration files)
+- tqdm (for progress bars)
+- pandas (optional, for data analysis)
+- matplotlib (optional, for visualization)

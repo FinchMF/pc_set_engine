@@ -4,3 +4,5 @@ output.json
 __pycache__
 *.mid
 midi_files/
+result.json
+datasets/

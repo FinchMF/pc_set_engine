@@ -1,0 +1,25 @@
+# Base configuration for Monte Carlo simulations
+
+# Generation properties
+generation_type: melodic
+start_pc: 0  # C
+progression: true
+progression_type: directed
+target_pc: 7  # G
+sequence_length: 8
+
+# Randomness controls (these will likely be varied in simulations)
+randomness_factor: 0.4
+variation_probability: 0.5
+
+# Constraints
+constraints:
+  max_interval: 5
+  vary_pc: true
+
+# MIDI properties
+midi_properties:
+  tempo: 120
+  base_octave: 4
+  note_duration: 0.5
+  velocity: 64
