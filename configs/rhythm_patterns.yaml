@@ -1,0 +1,71 @@
+# Rhythm pattern configurations for various musical styles
+
+# Standard 4/4 with regular eighth notes
+basic_4_4:
+  time_signature: [4, 4]
+  subdivision: 2
+  subdivision_type: regular
+  accent_type: downbeat
+  variation_probability: 0.1
+  accent_pattern: [1.0, 0.7, 0.9, 0.7, 1.0, 0.7, 0.9, 0.7]
+
+# Jazz swing
+jazz_swing:
+  time_signature: [4, 4]
+  subdivision: 2
+  subdivision_type: swing
+  accent_type: offbeat
+  variation_probability: 0.3
+  tempo: 130
+
+# Waltz 3/4
+waltz:
+  time_signature: [3, 4]
+  subdivision: 2
+  subdivision_type: regular
+  accent_type: downbeat
+  accent_pattern: [1.0, 0.5, 0.7, 0.5, 0.8, 0.5]
+  variation_probability: 0.1
+  tempo: 90
+
+# Bossa nova
+bossa_nova:
+  time_signature: [4, 4]
+  subdivision: 4
+  subdivision_type: regular
+  accent_type: custom
+  accent_pattern: [1.0, 0.6, 0.7, 0.6, 0.9, 0.6, 0.8, 0.5, 1.0, 0.5, 0.7, 0.5, 0.9, 0.5, 0.7, 0.5]
+  variation_probability: 0.2
+  shift_probability: 0.3
+  tempo: 110
+
+# 6/8 compound meter
+compound:
+  time_signature: [6, 8]
+  subdivision: 2
+  subdivision_type: regular
+  accent_type: custom
+  accent_pattern: [1.0, 0.6, 0.8, 0.9, 0.7, 0.6]
+  variation_probability: 0.15
+  tempo: 120
+
+# Complex polyrhythm (3 against 2)
+polyrhythm:
+  time_signature: [4, 4]
+  subdivision: 6
+  subdivision_type: complex
+  accent_type: custom
+  accent_pattern: [1.0, 0.5, 0.8, 0.9, 0.5, 0.7]
+  polyrhythm_ratio: [3, 2]
+  variation_probability: 0.2
+  tempo: 100
+
+# Syncopated rhythm
+syncopated:
+  time_signature: [4, 4]
+  subdivision: 4
+  subdivision_type: regular
+  accent_type: syncopated
+  variation_probability: 0.4
+  shift_probability: 0.3
+  tempo: 120

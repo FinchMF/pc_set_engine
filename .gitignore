@@ -7,3 +7,5 @@ midi_files/
 result.json
 datasets/
 weight_studies/
+rhythm_studies/
+training_dataset_example/

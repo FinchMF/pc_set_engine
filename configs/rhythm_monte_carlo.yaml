@@ -1,0 +1,24 @@
+# Base generation properties
+generation_type: "chordal"
+start_pc: [0, 4, 7]  # C major
+progression: true
+progression_type: "random"
+sequence_length: 8
+randomness_factor: 0.4
+variation_probability: 0.5
+
+# Rhythm configuration for Monte Carlo simulation
+rhythm:
+  time_signature: [4, 4]
+  subdivision: 4  # Sixteenth notes in 4/4
+  subdivision_type: "regular"
+  accent_type: "downbeat"
+  variation_probability: 0.3
+  shift_probability: 0.2
+  tempo: 110
+
+# MIDI properties
+midi_properties:
+  tempo: 110
+  base_octave: 4
+  note_duration: 0.5

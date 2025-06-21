@@ -49,7 +49,8 @@ from pc_sets.engine import (
     GenerationType,
     ProgressionType
 )
-from midi import sequence_to_midi
+from pc_sets.rhythm import EXAMPLE_RHYTHM_CONFIG
+from midi import sequence_to_midi, sequence_to_midi_with_rhythm
 
 def get_default_config() -> Dict:
     """Return the default configuration for the pitch class engine.
@@ -309,6 +310,22 @@ def main():
     parser.add_argument('--base-octave', type=int, default=4,
                       help='Base octave for MIDI generation (4 = middle C)')
     
+    # Add rhythm-related arguments
+    parser.add_argument('--rhythm', action='store_true',
+                      help='Apply rhythm patterns to the sequence')
+    
+    parser.add_argument('--time-signature', type=str, default='4/4',
+                      help='Time signature for rhythm (e.g., "4/4", "3/4")')
+    
+    parser.add_argument('--subdivision', type=int, default=4,
+                      help='Rhythmic subdivision (e.g., 4 for sixteenth notes in 4/4)')
+    
+    parser.add_argument('--rhythm-type', choices=['regular', 'swing', 'dotted', 'shuffle', 'complex'],
+                      default='regular', help='Type of rhythmic subdivision')
+    
+    parser.add_argument('--accent-type', choices=['downbeat', 'offbeat', 'syncopated', 'custom'],
+                      default='downbeat', help='Type of accent pattern')
+    
     args = parser.parse_args()
     
     # Set log level based on command line argument
@@ -359,6 +376,25 @@ def main():
             "note_duration": 0.5,
         }
     
+    # Process time signature
+    time_sig_parts = args.time_signature.split('/')
+    if len(time_sig_parts) == 2:
+        time_signature = (int(time_sig_parts[0]), int(time_sig_parts[1]))
+    else:
+        time_signature = (4, 4)  # Default to 4/4
+    
+    # Create rhythm configuration if rhythm flag is set
+    rhythm_config = None
+    if args.rhythm:
+        rhythm_config = {
+            "time_signature": time_signature,
+            "subdivision": args.subdivision,
+            "subdivision_type": args.rhythm_type,
+            "accent_type": args.accent_type,
+            "variation_probability": args.randomness,  # Reuse randomness parameter
+            "tempo": args.tempo
+        }
+    
     # Run the engine with the selected configuration
     sequence = run_engine_with_config(config)
     
@@ -374,7 +410,23 @@ def main():
     if args.midi:
         is_melodic = generation_type.lower() == "melodic"
         try:
-            midi_path = sequence_to_midi(sequence, args.midi, is_melodic=is_melodic, params=midi_params)
+            if rhythm_config:
+                # Use rhythm-aware MIDI generation
+                midi_path = sequence_to_midi_with_rhythm(
+                    sequence, 
+                    args.midi, 
+                    is_melodic=is_melodic, 
+                    rhythm_config=rhythm_config,
+                    params=midi_params
+                )
+            else:
+                # Use standard MIDI generation
+                midi_path = sequence_to_midi(
+                    sequence, 
+                    args.midi, 
+                    is_melodic=is_melodic, 
+                    params=midi_params
+                )
             print(f"MIDI file saved to {midi_path}")
         except Exception as e:
             logger.error(f"Failed to create MIDI file: {e}")

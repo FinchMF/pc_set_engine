@@ -107,6 +107,7 @@ class GenerationConfig:
         randomness_factor: Level of randomness (0.0-1.0).
         variation_probability: Probability of applying variations (0.0-1.0).
         interval_weights: Optional dictionary of interval weights or name of a weight profile.
+        rhythm: Optional rhythm configuration for applying rhythm to the sequence.
     """
     start_pc: Union[int, List[int]]  # Starting pitch class or set
     generation_type: GenerationType  # Melodic or chordal
@@ -121,6 +122,7 @@ class GenerationConfig:
     randomness_factor: float = 0.2  # Level of randomness (0.0 to 1.0)
     variation_probability: float = 0.3  # Probability of applying variations
     interval_weights: Optional[Union[Dict[int, float], str]] = None  # Interval weights or profile name
+    rhythm: Optional[Dict[str, Any]] = None  # Rhythm configuration
     
     def __post_init__(self):
         """Initialize derived attributes and validate configuration.
@@ -740,21 +742,21 @@ def generate_sequence_from_config(config_data: Dict) -> List[Union[int, List[int
         
     Returns:
         Generated sequence of pitch classes or pitch class sets.
-        
-    Example:
-        ```
-        config = {
-            "start_pc": 0,  # C
-            "target_pc": 7,  # G
-            "generation_type": "melodic",
-            "progression": True
-        }
-        sequence = generate_sequence_from_config(config)
-        ```
     """
     logger.info("Generating sequence from configuration")
+    
+    # Remove rhythm configuration before creating the engine
+    # as it's handled separately after sequence generation
+    rhythm_config = config_data.pop("rhythm", None)
+    
     engine = PitchClassEngine(config_data)
-    return engine.generate()
+    sequence = engine.generate()
+    
+    # Put the rhythm configuration back in case it's needed elsewhere
+    if rhythm_config is not None:
+        config_data["rhythm"] = rhythm_config
+    
+    return sequence
 
 
 # Example configuration schema:

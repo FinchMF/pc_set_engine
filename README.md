@@ -11,6 +11,7 @@ This repository contains a rule-based engine for creating musical sequences usin
 - Progressive transformations from one pitch class (set) to another
 - Random walks with controlled variability
 - Static presentations with controlled variations
+- Rhythmic patterns with customizable time signatures, subdivisions, and accents
 
 The engine is highly configurable, allowing for fine-tuned control over the level of randomness, variation probability, and progression characteristics.
 
@@ -22,6 +23,7 @@ The engine is highly configurable, allowing for fine-tuned control over the leve
 - **Randomness Controls**: Fine-tune the balance between predictability and variation
 - **MIDI Output**: Generate playable MIDI files from pitch class sequences
 - **Interval Vector Weighting**: Prioritize specific intervals to influence harmonic character
+- **Rhythmic Patterns**: Apply configurable rhythmic structures with various time signatures
 - **Monte Carlo Analysis**: Study correlations between parameters and musical characteristics
 - **Comprehensive Documentation**: Well-documented code with usage examples
 - **Modular Design**: Easily extend with new operations and features
@@ -36,7 +38,8 @@ pc_rules_engine/
 ├── pc_sets/
 │   ├── __init__.py
 │   ├── pitch_classes.py   # Core pitch class theory implementation
-│   └── engine.py          # Generation engine implementation
+│   ├── engine.py          # Generation engine implementation
+│   └── rhythm.py          # Rhythm generation and manipulation module
 ├── midi/
 │   ├── __init__.py
 │   └── translator.py      # MIDI translation functionality
@@ -140,6 +143,23 @@ python run_engine.py --config-file configs/melodic_basic.yaml --sequence-length 
 - Statistical analysis of the effects of interval weighting on musical output
 - Tools for interpreting Monte Carlo simulation results
 - Jupyter notebooks for interactive exploration of dataset patterns
+
+### Rhythm Module (`pc_sets/rhythm.py`)
+
+- `RhythmEngine`: Core class for generating rhythmic patterns
+- `RhythmConfig`: Configuration data class for rhythm parameters
+- Supports multiple rhythm types:
+  - Regular subdivisions (evenly distributed durations)
+  - Swing feel (uneven subdivisions with emphasis)
+  - Dotted rhythms (long-short patterns)
+  - Shuffle patterns (milder swing feel)
+  - Complex rhythms (mixed subdivisions)
+- Time signature and subdivision-based rhythm generation
+- Accent pattern application for musical expression
+- Rhythm manipulation operations (augmentation, diminution, displacement)
+- Polyrhythm and cross-rhythm generation
+- Predefined rhythm patterns for various musical styles
+- Integration with pitch class sequences for complete musical output
 
 ## Usage Examples
 
@@ -494,6 +514,151 @@ for profile_name in INTERVAL_WEIGHT_PROFILES:
     sequences[profile_name] = generate_sequence_from_config(config)
 ```
 
+### Using Rhythm Patterns
+
+```bash
+# Generate a sequence with rhythm
+python run_engine.py --config-file configs/melodic_basic.yaml --midi output.mid --rhythm --rhythm-type swing
+
+# Specify time signature and subdivision
+python run_engine.py --config-type melodic --rhythm --time-signature 3/4 --subdivision 8
+
+# Use a complex rhythm pattern with specified accent type
+python run_engine.py --config-type chord-progression --rhythm --rhythm-type complex --accent-type syncopated
+```
+
+### Combining Rhythms and Pitches Programmatically
+
+```python
+from pc_sets.engine import generate_sequence_from_config
+from pc_sets.rhythm import RhythmEngine, RhythmConfig
+from midi.translator import sequence_to_midi_with_rhythm
+
+# Generate pitch sequence
+pitch_config = {
+    "start_pc": [0, 4, 7],  # C major
+    "generation_type": "chordal",
+    "sequence_length": 8,
+    "progression_type": "random"
+}
+pitch_sequence = generate_sequence_from_config(pitch_config)
+
+# Create rhythm configuration
+rhythm_config = RhythmConfig(
+    time_signature=(4, 4),
+    subdivision=8,  # eighth note subdivisions
+    subdivision_type="swing",
+    accent_type="offbeat",
+    variation_probability=0.3
+)
+
+# Create rhythm engine and apply to sequence
+rhythm_engine = RhythmEngine(rhythm_config)
+timed_sequence = rhythm_engine.apply_rhythm_to_sequence(
+    pitch_sequence, 
+    is_melodic=(pitch_config["generation_type"] == "melodic")
+)
+
+# Generate MIDI with rhythm
+sequence_to_midi_with_rhythm(
+    pitch_sequence, 
+    "output_with_rhythm.mid", 
+    is_melodic=(pitch_config["generation_type"] == "melodic"),
+    rhythm_config=rhythm_config
+)
+```
+
+### Creating Polyrhythmic Patterns
+
+```yaml
+# configs/polyrhythm_config.yaml
+# Generation properties
+generation_type: melodic
+start_pc: 0  # C
+progression: true
+progression_type: random
+sequence_length: 16
+
+# Rhythm properties
+rhythm:
+  time_signature: [4, 4]
+  subdivision: 12
+  subdivision_type: complex
+  accent_pattern: [1.0, 0.5, 0.8, 0.6, 0.9, 0.4, 0.7, 0.5, 0.8, 0.3, 0.6, 0.5]
+  polyrhythm_ratio: [3, 4]  # 3 against 4 polyrhythm
+  variation_probability: 0.2
+  
+# MIDI properties
+midi_properties:
+  tempo: 100
+  base_octave: 4
+```
+
+```bash
+python run_engine.py --config-file configs/polyrhythm_config.yaml --midi polyrhythm_example.mid
+```
+
+### Combining Interval Weights and Rhythm
+
+```python
+from pc_sets.engine import generate_sequence_from_config
+from pc_sets.rhythm import RhythmConfig
+from midi.translator import sequence_to_midi_with_rhythm
+
+# Configuration with both interval weights and rhythm
+config = {
+    "start_pc": [0, 3, 7],  # C minor
+    "generation_type": "chordal",
+    "sequence_length": 8,
+    "progression_type": "random",
+    "interval_weights": "jazzy"  # Use jazz-influenced interval weights
+}
+
+# Generate the pitch sequence
+sequence = generate_sequence_from_config(config)
+
+# Create a swing rhythm configuration
+rhythm_config = {
+    "time_signature": (4, 4),
+    "subdivision": 8,
+    "subdivision_type": "swing",
+    "accent_type": "syncopated",
+    "tempo": 110
+}
+
+# Generate MIDI with both weighted intervals and rhythm
+sequence_to_midi_with_rhythm(
+    sequence, 
+    "jazz_with_rhythm.mid", 
+    is_melodic=False, 
+    rhythm_config=rhythm_config
+)
+```
+
+### Manipulating Rhythm Vectors
+
+```python
+from pc_sets.rhythm import RhythmEngine, RhythmConfig
+
+# Create a rhythm engine
+rhythm_config = RhythmConfig(time_signature=(4, 4), subdivision=4)
+rhythm_engine = RhythmEngine(rhythm_config)
+
+# Generate a basic rhythm
+base_rhythm = rhythm_engine.generate(length=8)
+print("Base Rhythm:", base_rhythm)
+
+# Apply transformations
+augmented = rhythm_engine.augment(base_rhythm, factor=2.0)  # Double durations
+print("Augmented:", augmented)
+
+diminished = rhythm_engine.diminish(base_rhythm, factor=2.0)  # Halve durations
+print("Diminished:", diminished)
+
+displaced = rhythm_engine.displace(base_rhythm, offset=1)  # Shift by one position
+print("Displaced:", displaced)
+```
+
 ## Logging
 
 The system includes a comprehensive logging mechanism to track operations and debug issues. Logs are written to both console and files in the `logs/` directory.
@@ -518,6 +683,8 @@ The modular design allows for easy extension:
 6. Create new interval weight profiles in `INTERVAL_WEIGHT_PROFILES`
 7. Develop new visualization tools in the `analysis/` directory
 8. Add custom statistical tests to the analysis notebooks
+9. Implement new rhythm subdivision types in `RhythmEngine._generate_base_pattern()`
+10. Create additional accent patterns and time signature templates
 
 ## Requirements
 

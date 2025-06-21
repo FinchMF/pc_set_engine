@@ -31,6 +31,7 @@ import os
 from typing import List, Union, Dict, Optional, Tuple
 import sys
 from pathlib import Path
+from pc_sets.rhythm import apply_rhythm_to_sequence, RhythmConfig
 
 # Add parent directory to path to allow imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -320,105 +321,115 @@ def enhance_with_rhythm(
 
 def sequence_to_midi_with_rhythm(
     sequence: List[Union[int, List[int]]],
-    output_path: str,
-    durations: List[float],
+    filename: str,
     is_melodic: bool = True,
+    rhythm_config: Optional[Union[Dict, RhythmConfig]] = None,
     params: Dict = None
 ) -> str:
-    """Convert a pitch class sequence to a MIDI file with custom rhythm.
+    """Convert a pitch class sequence to MIDI with rhythm applied.
+    
+    Creates a MIDI file from a pitch class sequence, applying rhythm
+    patterns based on the provided rhythm configuration.
     
     Args:
-        sequence: The sequence of pitch classes or pitch class sets
-        output_path: Path where the MIDI file should be saved
-        durations: List of note durations in beats
-        is_melodic: Whether the sequence is melodic or chordal
-        params: Dictionary of MIDI parameters
+        sequence: The pitch class sequence to convert.
+        filename: Path where the MIDI file should be saved.
+        is_melodic: Whether the sequence contains single notes (True) or chords (False).
+        rhythm_config: Configuration for rhythm generation.
+        params: Additional parameters for MIDI generation.
         
     Returns:
-        The path to the created MIDI file
-    """
-    if len(sequence) != len(durations):
-        raise ValueError("Sequence and durations must have the same length")
+        Path to the generated MIDI file.
         
-    # Use default parameters if none provided
-    params = params or DEFAULT_PARAMS.copy()
+    Example:
+        ```python
+        rhythm_config = {"time_signature": (4, 4), "subdivision": 8, "accent_type": "downbeat"}
+        sequence_to_midi_with_rhythm(sequence, "output.mid", is_melodic=True, rhythm_config=rhythm_config)
+        ```
+    """
+    logger.info(f"Converting sequence to MIDI with rhythm: {filename}")
     
-    # Handle output path - ensure it's in the midi_files directory
-    output_path = _ensure_midi_directory(output_path)
+    # Set default parameters
+    if params is None:
+        params = {}
     
-    # Create a new MIDI file with one track
-    midi_file = MidiFile(type=0)  # Type 0 (single track)
-    track = MidiTrack()
-    midi_file.tracks.append(track)
+    tempo = params.get('tempo', 120)
+    base_octave = params.get('base_octave', 4)
     
-    # Set up tempo and time signature
-    tempo_bpm = params.get("tempo", DEFAULT_PARAMS["tempo"])
-    tempo_microseconds = int(60000000 / tempo_bpm)
-    track.append(mido.MetaMessage('set_tempo', tempo=tempo_microseconds, time=0))
+    # Apply rhythm to sequence
+    if rhythm_config:
+        timed_sequence = apply_rhythm_to_sequence(sequence, rhythm_config, is_melodic)
+    else:
+        # Default rhythm if no config provided (quarter notes)
+        default_rhythm = {"time_signature": (4, 4), "subdivision": 1, "accent_type": "downbeat"}
+        timed_sequence = apply_rhythm_to_sequence(sequence, default_rhythm, is_melodic)
     
-    # Add time signature if specified
-    if "time_signature" in params:
-        numerator, denominator = params["time_signature"]
+    # Create a MIDI file
+    mid = mido.MidiFile()
+    track = mido.MidiTrack()
+    mid.tracks.append(track)
+    
+    # Set tempo
+    track.append(mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(tempo)))
+    
+    # Set time signature if provided in rhythm_config
+    if rhythm_config and hasattr(rhythm_config, 'time_signature'):
+        numerator, denominator = rhythm_config.time_signature
         track.append(mido.MetaMessage('time_signature', 
                                      numerator=numerator, 
-                                     denominator=denominator, 
-                                     clocks_per_click=24, 
-                                     notated_32nd_notes_per_beat=8, 
-                                     time=0))
+                                     denominator=denominator,
+                                     clocks_per_click=24,
+                                     notated_32nd_notes_per_beat=8))
     
-    # Get parameters
-    base_octave = params.get("base_octave", DEFAULT_PARAMS["base_octave"])
-    velocity = params.get("velocity", DEFAULT_PARAMS["velocity"])
-    channel = params.get("channel", DEFAULT_PARAMS["channel"])
+    # Calculate ticks per beat
+    ticks_per_beat = mid.ticks_per_beat
     
-    ticks_per_beat = midi_file.ticks_per_beat
+    # Track current time
+    current_time = 0
     
-    if is_melodic:
-        # Process melodic sequence with custom rhythm
-        for i, pc in enumerate(sequence):
-            # Convert pitch class to MIDI note
-            note = pc_to_midi_note(pc, base_octave)
+    # Add notes with rhythm
+    for note_data in timed_sequence:
+        # Get duration in beats
+        duration = note_data['duration']
+        duration_ticks = int(duration * ticks_per_beat)
+        
+        # Get velocity from note_data or use default
+        velocity = note_data.get('velocity', 64)
+        
+        # Convert to MIDI note format
+        if is_melodic:
+            # Single note
+            pitch = note_data['pitch']
+            midi_note = pitch + (base_octave * 12)
             
-            # Convert duration from beats to ticks
-            ticks = int(durations[i] * ticks_per_beat)
+            # Note on
+            track.append(mido.Message('note_on', note=midi_note, velocity=velocity, time=0))
+            # Note off
+            track.append(mido.Message('note_off', note=midi_note, velocity=0, time=duration_ticks))
+        else:
+            # Chord
+            pitches = note_data['pitches']
+            midi_notes = [p + (base_octave * 12) for p in pitches]
             
-            # Add note_on message
-            track.append(Message('note_on', note=note, velocity=velocity, 
-                               time=0, channel=channel))
-            
-            # Add note_off message after the duration
-            track.append(Message('note_off', note=note, velocity=0, 
-                               time=ticks, channel=channel))
-    else:
-        # Process chord sequence with custom rhythm
-        for i, chord in enumerate(sequence):
-            # For each chord, add all notes simultaneously
-            for j, pc in enumerate(chord):
-                note = pc_to_midi_note(pc, base_octave)
-                track.append(Message('note_on', note=note, velocity=velocity, 
-                                   time=0, channel=channel))
-            
-            # Convert duration from beats to ticks
-            ticks = int(durations[i] * ticks_per_beat)
-            
-            # Add note_off messages for all notes after the duration
-            for j, pc in enumerate(chord):
-                note = pc_to_midi_note(pc, base_octave)
-                time = ticks if j == 0 else 0
-                track.append(Message('note_off', note=note, velocity=0, 
-                                   time=time, channel=channel))
+            # Note on for all pitches
+            for i, midi_note in enumerate(midi_notes):
+                track.append(mido.Message('note_on', note=midi_note, velocity=velocity, time=0 if i > 0 else 0))
+                
+            # Note off for all pitches after duration
+            for i, midi_note in enumerate(midi_notes):
+                track.append(mido.Message('note_off', note=midi_note, velocity=0, 
+                                        time=duration_ticks if i == 0 else 0))
+        
+        current_time += duration_ticks
     
     # End of track marker
     track.append(mido.MetaMessage('end_of_track', time=0))
     
-    # Create directory if it doesn't exist
-    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    # Save to file
+    mid.save(filename)
+    logger.info(f"MIDI file saved: {filename}")
     
-    # Save the file
-    midi_file.save(output_path)
-    logger.info(f"MIDI file with custom rhythm saved to {output_path}")
-    
-    return output_path
+    return filename
 
 
 if __name__ == "__main__":
