@@ -1,0 +1,29 @@
+# Configuration for generating modern using optimized interval weights
+generation_type: chordal
+start_pc:
+- 0
+- 4
+- 7
+progression: true
+progression_type: random
+sequence_length: 8
+randomness_factor: 0.4
+variation_probability: 0.6
+allowed_operations:
+- transpose
+- substitute_note
+- add_note
+- remove_note
+constraints:
+  vary_chord: true
+midi_properties:
+  tempo: 100
+  base_octave: 4
+  note_duration: 0.75
+interval_weights:
+  1: 1.5
+  2: 1.0
+  3: 2.0
+  4: 1.5
+  5: 1.0
+  6: 1.5

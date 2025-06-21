@@ -127,6 +127,7 @@ class PitchClassSet:
         _prime_form (List[int], optional): Cached prime form.
         _forte_number (str, optional): Cached Forte number.
         _interval_vector (List[int], optional): Cached interval vector.
+        _weighted_interval_vector (Dict[str, List[float]], optional): Cached weighted interval vectors.
     """
     _FORTE_CATALOG = {}  # This will be populated with the Forte catalog data
     
@@ -146,6 +147,7 @@ class PitchClassSet:
         self._prime_form = None
         self._forte_number = None
         self._interval_vector = None
+        self._weighted_interval_vector = {}
         
         logger.debug(f"Created {self}")
     
@@ -314,6 +316,129 @@ class PitchClassSet:
                     
         self._interval_vector = vector
         return self._interval_vector
+    
+    def weighted_interval_vector(self, weights: Dict[int, float] = None) -> List[float]:
+        """Calculate a weighted interval vector of the pitch class set.
+        
+        Produces an interval vector where each interval class is multiplied by
+        a weight factor. This allows emphasizing or de-emphasizing certain intervals
+        for analysis or generation purposes.
+        
+        Args:
+            weights: Dictionary mapping interval classes (1-6) to weight factors.
+                    Default weights are all 1.0 (unchanged).
+        
+        Returns:
+            List[float]: The weighted interval vector with 6 elements.
+            
+        Example:
+            ```python
+            # Emphasize perfect 4ths/5ths and major/minor thirds
+            weights = {1: 0.5, 2: 1.5, 3: 1.5, 4: 0.8, 5: 2.0, 6: 0.7}
+            weighted_vector = pcs.weighted_interval_vector(weights)
+            ```
+        """
+        # Use default weights if none provided
+        if weights is None:
+            weights = {1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.0, 6: 1.0}
+        
+        # Create a weights key for caching
+        weights_key = tuple(sorted(weights.items()))
+        
+        # Check if we have already computed this weighted vector
+        if weights_key in self._weighted_interval_vector:
+            return self._weighted_interval_vector[weights_key]
+        
+        # Calculate the standard interval vector
+        iv = self.interval_vector
+        
+        # Apply weights
+        weighted_iv = [iv[i] * weights.get(i + 1, 1.0) for i in range(6)]
+        
+        # Cache the result
+        self._weighted_interval_vector[weights_key] = weighted_iv
+        return weighted_iv
+    
+    def interval_similarity(self, other: 'PitchClassSet', weights: Dict[int, float] = None) -> float:
+        """Calculate the weighted interval similarity between two pitch class sets.
+        
+        Compares the weighted interval vectors of two sets to determine how similar
+        they are in terms of their interval content, emphasizing certain intervals
+        based on the provided weights.
+        
+        Args:
+            other: Another PitchClassSet to compare with.
+            weights: Dictionary mapping interval classes (1-6) to weight factors.
+                    Default weights are all 1.0 (unchanged).
+        
+        Returns:
+            float: A similarity score between 0.0 (completely different) and 
+                  1.0 (identical interval content).
+        """
+        v1 = self.weighted_interval_vector(weights)
+        v2 = other.weighted_interval_vector(weights)
+        
+        # Calculate normalized dot product (cosine similarity)
+        dot_product = sum(a * b for a, b in zip(v1, v2))
+        magnitude1 = sum(a * a for a in v1) ** 0.5
+        magnitude2 = sum(b * b for b in v2) ** 0.5
+        
+        # Avoid division by zero
+        if magnitude1 == 0 or magnitude2 == 0:
+            return 0.0
+            
+        return dot_product / (magnitude1 * magnitude2)
+    
+    def find_similar_sets(self, 
+                          candidates: List['PitchClassSet'], 
+                          weights: Dict[int, float] = None, 
+                          threshold: float = 0.8) -> List[Tuple['PitchClassSet', float]]:
+        """Find sets with similar interval content based on weighted interval vectors.
+        
+        Args:
+            candidates: List of PitchClassSet objects to compare with.
+            weights: Dictionary mapping interval classes (1-6) to weight factors.
+            threshold: Minimum similarity score to include in results.
+            
+        Returns:
+            List of tuples containing (PitchClassSet, similarity_score), sorted by score.
+        """
+        results = []
+        for candidate in candidates:
+            similarity = self.interval_similarity(candidate, weights)
+            if similarity >= threshold:
+                results.append((candidate, similarity))
+        
+        # Sort by similarity (highest first)
+        return sorted(results, key=lambda x: x[1], reverse=True)
+    
+    def get_interval_profile(self) -> Dict[str, float]:
+        """Generate a descriptive profile of the set's interval content.
+        
+        Returns:
+            Dict[str, float]: A dictionary with ratio metrics for different interval types.
+        """
+        iv = self.interval_vector
+        total = sum(iv)
+        
+        if total == 0:
+            return {
+                "dissonance_ratio": 0.0,
+                "consonance_ratio": 0.0,
+                "semitone_ratio": 0.0,
+                "tritone_ratio": 0.0
+            }
+        
+        # Group intervals by general musical character
+        dissonance = iv[0] + iv[5]  # minor 2nds/major 7ths and tritones
+        consonance = iv[2] + iv[4]  # minor 3rds/major 6ths and perfect 4ths/5ths
+        
+        return {
+            "dissonance_ratio": dissonance / total,
+            "consonance_ratio": consonance / total,
+            "semitone_ratio": iv[0] / total if total else 0,
+            "tritone_ratio": iv[5] / total if total else 0
+        }
     
     @classmethod
     def _init_forte_catalog(cls):
@@ -530,15 +655,61 @@ COMMON_SETS = {
 
 logger.info(f"Loaded {len(COMMON_SETS)} common pitch class sets")
 
-# Example usage:
-# cmin7 = PitchClassSet([0, 3, 7, 10])
-# print(cmin7.forte_number)  # "4-26"
-# print(cmin7.interval_vector)  # [0, 1, 1, 1, 2, 1]
-# print(cmin7.normal_form)
-# print(cmin7.prime_form)
+# Add a new section with weighted interval configurations
+INTERVAL_WEIGHT_PROFILES = {
+    "standard": {
+        1: 1.0,  # minor 2nds/major 7ths
+        2: 1.0,  # major 2nds/minor 7ths
+        3: 1.0,  # minor 3rds/major 6ths
+        4: 1.0,  # major 3rds/minor 6ths
+        5: 1.0,  # perfect 4ths/5ths
+        6: 1.0   # tritones
+    },
+    "consonant": {
+        1: 0.5,  # de-emphasize minor 2nds/major 7ths
+        2: 0.8,  # slightly de-emphasize major 2nds/minor 7ths
+        3: 1.5,  # emphasize minor 3rds/major 6ths
+        4: 1.5,  # emphasize major 3rds/minor 6ths
+        5: 1.3,  # emphasize perfect 4ths/5ths
+        6: 0.3   # strongly de-emphasize tritones
+    },
+    "dissonant": {
+        1: 1.8,  # emphasize minor 2nds/major 7ths
+        2: 1.0,  # neutral on major 2nds/minor 7ths
+        3: 0.8,  # slightly de-emphasize minor 3rds/major 6ths
+        4: 0.8,  # slightly de-emphasize major 3rds/minor 6ths
+        5: 0.7,  # de-emphasize perfect 4ths/5ths
+        6: 1.7   # emphasize tritones
+    },
+    "jazzy": {
+        1: 1.0,  # neutral on minor 2nds/major 7ths
+        2: 1.2,  # slightly emphasize major 2nds/minor 7ths
+        3: 1.3,  # emphasize minor 3rds/major 6ths
+        4: 1.3,  # emphasize major 3rds/minor 6ths
+        5: 0.7,  # de-emphasize perfect 4ths/5ths
+        6: 1.2   # slightly emphasize tritones
+    },
+    "quartal": {  # For quartal harmony
+        1: 0.7,  # de-emphasize minor 2nds/major 7ths
+        2: 0.9,  # slightly de-emphasize major 2nds/minor 7ths
+        3: 0.7,  # de-emphasize minor 3rds/major 6ths
+        4: 0.7,  # de-emphasize major 3rds/minor 6ths
+        5: 2.0,  # strongly emphasize perfect 4ths/5ths
+        6: 0.8   # slightly de-emphasize tritones
+    }
+}
+
+logger.info(f"Loaded {len(INTERVAL_WEIGHT_PROFILES)} interval weight profiles")
+
+# Example of using weighted interval vectors:
+# cm = PitchClassSet([0, 3, 7])  # C minor
+# cmaj = PitchClassSet([0, 4, 7])  # C major
 # 
-# # Transpose a set
-# fmin7 = cmin7.transpose(5)  # F minor 7 chord
+# # Standard (unweighted) comparison
+# similarity = cm.interval_similarity(cmaj)
+# print(f"Standard similarity: {similarity:.4f}")
 # 
-# # Get a common set
-# major_scale = COMMON_SETS["major_scale"]
+# # Consonant-weighted comparison
+# consonant_weights = INTERVAL_WEIGHT_PROFILES["consonant"]
+# similarity = cm.interval_similarity(cmaj, consonant_weights)
+# print(f"Consonant-weighted similarity: {similarity:.4f}")

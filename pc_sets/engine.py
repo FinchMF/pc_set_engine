@@ -56,7 +56,7 @@ from utils import get_logger, log_config, log_execution_time
 # Initialize logger
 logger = get_logger(__name__)
 
-from .pitch_classes import PitchClass, PitchClassSet, COMMON_SETS
+from .pitch_classes import PitchClass, PitchClassSet, COMMON_SETS, INTERVAL_WEIGHT_PROFILES
 
 class GenerationType(Enum):
     """Enumeration of supported generation types.
@@ -106,6 +106,7 @@ class GenerationConfig:
         style_profile: Optional style profile to influence generation.
         randomness_factor: Level of randomness (0.0-1.0).
         variation_probability: Probability of applying variations (0.0-1.0).
+        interval_weights: Optional dictionary of interval weights or name of a weight profile.
     """
     start_pc: Union[int, List[int]]  # Starting pitch class or set
     generation_type: GenerationType  # Melodic or chordal
@@ -119,6 +120,7 @@ class GenerationConfig:
     style_profile: Optional[str] = None  # Style profile (e.g., "jazz", "classical")
     randomness_factor: float = 0.2  # Level of randomness (0.0 to 1.0)
     variation_probability: float = 0.3  # Probability of applying variations
+    interval_weights: Optional[Union[Dict[int, float], str]] = None  # Interval weights or profile name
     
     def __post_init__(self):
         """Initialize derived attributes and validate configuration.
@@ -161,6 +163,13 @@ class GenerationConfig:
         # Clamp variation_probability between 0 and 1
         self.variation_probability = max(0.0, min(1.0, self.variation_probability))
 
+        # Process interval weights
+        if isinstance(self.interval_weights, str):
+            if self.interval_weights in INTERVAL_WEIGHT_PROFILES:
+                self.interval_weights = INTERVAL_WEIGHT_PROFILES[self.interval_weights]
+            else:
+                logger.warning(f"Unknown interval weight profile '{self.interval_weights}', using standard weights")
+                self.interval_weights = INTERVAL_WEIGHT_PROFILES["standard"]
 
 class PitchClassEngine:
     """Engine for generating melodic or chordal sequences based on pitch classes.
@@ -289,7 +298,7 @@ class PitchClassEngine:
                         # Add controlled randomness based on randomness factor
                         if random.random() < variation_prob:
                             # Calculate maximum deviation based on randomness factor
-                            max_deviation = int(1 + 3 * randomness)  # 1-4 semitones based on randomness
+                            max_deviation = int(1 + 3 * randomness) # 1-4 semitones based on randomness
                             deviation = random.randint(-max_deviation, max_deviation)
                             next_pc = (expected_pc + deviation) % 12
                         else:
@@ -423,6 +432,39 @@ class PitchClassEngine:
                 for _ in range(1, self.config.sequence_length):
                     # Apply a random transformation from allowed operations
                     current_pcs = self._apply_random_transformation(current_pcs)
+                    
+                    # If we have interval weights, we can occasionally select a chord
+                    # from common sets that aligns with our interval preferences
+                    if (self.config.interval_weights and 
+                        random.random() < self.config.randomness_factor * 0.5):
+                        
+                        # Get candidate sets with the same cardinality
+                        candidates = []
+                        for name, pcs in COMMON_SETS.items():
+                            if len(pcs) == len(current_pcs):
+                                candidates.append(pcs)
+                        
+                        if candidates:
+                            # Find sets similar to our current set based on weighted intervals
+                            similar_sets = current_pcs.find_similar_sets(
+                                candidates, 
+                                weights=self.config.interval_weights,
+                                threshold=0.6
+                            )
+                            
+                            if similar_sets:
+                                # Choose one of the similar sets, biased toward higher similarity
+                                weights = [score**2 for _, score in similar_sets]  # Square to emphasize higher scores
+                                total = sum(weights)
+                                if total > 0:
+                                    r = random.uniform(0, total)
+                                    cumulative_weight = 0
+                                    for i, (pcs_set, _) in enumerate(similar_sets):
+                                        cumulative_weight += weights[i]
+                                        if cumulative_weight >= r:
+                                            current_pcs = pcs_set
+                                            break
+                    
                     sequence.append(sorted([pc.pc for pc in current_pcs.pcs]))
         else:
             # Static generation - generate variations on the same chord
@@ -501,8 +543,18 @@ class PitchClassEngine:
             
             for t in range(12):
                 transposed = [(pc + t) % 12 for pc in current_pcs]
-                distance = sum(min((t_pc - c_pc) % 12, (c_pc - t_pc) % 12) 
-                              for c_pc, t_pc in zip(sorted(transposed), sorted(target_pcs)))
+                
+                # Apply interval weights if available
+                if self.config.interval_weights:
+                    # Get the transposed set and compare using weighted intervals
+                    transposed_set = PitchClassSet(transposed)
+                    similarity = 1.0 - transposed_set.interval_similarity(
+                        target, self.config.interval_weights)
+                    distance = similarity * 100  # Scale to be comparable with previous distance
+                else:
+                    # Original distance calculation
+                    distance = sum(min((t_pc - c_pc) % 12, (c_pc - t_pc) % 12) 
+                                for c_pc, t_pc in zip(sorted(transposed), sorted(target_pcs)))
                 
                 if distance < best_distance:
                     best_distance = distance
@@ -588,6 +640,33 @@ class PitchClassEngine:
                 # Find a different pitch class
                 candidates = [pc for pc in range(12) if pc != current_pc and pc not in current_pcs]
                 
+                # If interval weights are specified, use them to influence the substitution
+                if self.config.interval_weights and candidates:
+                    # Calculate the weighted interval profile for each candidate
+                    candidate_scores = {}
+                    for candidate in candidates:
+                        test_set = current_pcs.copy()
+                        test_set[idx] = candidate
+                        test_pcs = PitchClassSet(test_set)
+                        
+                        # Higher score for sets that match our interval weight preferences
+                        weighted_vector = test_pcs.weighted_interval_vector(self.config.interval_weights)
+                        score = sum(weighted_vector)
+                        candidate_scores[candidate] = score
+                    
+                    # Choose candidate based on scores (weighted random selection)
+                    total_score = sum(candidate_scores.values())
+                    if total_score > 0:
+                        r = random.uniform(0, total_score)
+                        running_total = 0
+                        for candidate, score in candidate_scores.items():
+                            running_total += score
+                            if running_total >= r:
+                                current_pcs[idx] = candidate
+                                break
+                        return PitchClassSet(current_pcs)
+                
+                # Fall back to random selection if no weights or total_score is 0
                 if candidates:
                     current_pcs[idx] = random.choice(candidates)
                     return PitchClassSet(current_pcs)
@@ -692,7 +771,8 @@ EXAMPLE_CONFIG = {
         "vary_pc": True  # allow pitch class variation
     },
     "randomness_factor": 0.3,  # level of randomness (0.0-1.0)
-    "variation_probability": 0.4  # probability of applying variations (0.0-1.0)
+    "variation_probability": 0.4,  # probability of applying variations (0.0-1.0)
+    "interval_weights": "consonant"  # use the consonant interval weight profile
 }
 
 logger.info("Engine module initialized")

@@ -6,3 +6,4 @@ __pycache__
 midi_files/
 result.json
 datasets/
+weight_studies/

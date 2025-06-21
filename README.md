@@ -21,6 +21,8 @@ The engine is highly configurable, allowing for fine-tuned control over the leve
 - **Directed Progressions**: Smoothly transition from one pitch class (set) to another
 - **Randomness Controls**: Fine-tune the balance between predictability and variation
 - **MIDI Output**: Generate playable MIDI files from pitch class sequences
+- **Interval Vector Weighting**: Prioritize specific intervals to influence harmonic character
+- **Monte Carlo Analysis**: Study correlations between parameters and musical characteristics
 - **Comprehensive Documentation**: Well-documented code with usage examples
 - **Modular Design**: Easily extend with new operations and features
 
@@ -84,8 +86,10 @@ python run_engine.py --config-file configs/melodic_basic.yaml --sequence-length 
   - Normal form and prime form calculation
   - Forte number identification
   - Interval vector calculation
+  - Weighted interval vectors and similarity measurements
   - Set operations (transpose, invert, complement, etc.)
 - `COMMON_SETS`: Dictionary of predefined common musical pitch class sets
+- `INTERVAL_WEIGHT_PROFILES`: Predefined weightings for different musical styles
 
 ### Engine Module (`engine.py`)
 
@@ -120,6 +124,8 @@ python run_engine.py --config-file configs/melodic_basic.yaml --sequence-length 
 - Two main modes of operation:
   - General Monte Carlo: Random parameter exploration
   - Parameter Variation: Systematic study of specific parameter effects
+- Support for interval weighting configurations to influence generation
+- Analysis of correlations between interval weights and musical characteristics
 - Support for parallel processing to speed up large simulations
 - Statistical analysis of generated sequences
 - Export data to JSON and CSV for further analysis
@@ -213,6 +219,89 @@ plt.xlabel('Randomness Factor')
 plt.ylabel('Mean Interval Size')
 plt.title('Effect of Randomness on Interval Size')
 plt.savefig('randomness_vs_intervals.png')
+```
+
+### Using Interval Weights for Character Control
+
+```python
+from pc_sets.engine import generate_sequence_from_config
+from pc_sets.pitch_classes import INTERVAL_WEIGHT_PROFILES
+
+# Using a predefined interval weight profile
+config = {
+    "start_pc": [0, 4, 7],  # C major
+    "generation_type": "chordal",
+    "sequence_length": 8,
+    "progression": True,
+    "progression_type": "random",
+    "randomness_factor": 0.4,
+    "interval_weights": "jazzy"  # Use predefined profile
+}
+
+# Or define custom interval weights
+config_custom = {
+    "start_pc": [0, 3, 7],  # C minor
+    "generation_type": "chordal",
+    "sequence_length": 8,
+    "interval_weights": {
+        1: 0.8,  # minor 2nds/major 7ths
+        2: 1.2,  # major 2nds/minor 7ths
+        3: 1.5,  # minor 3rds/major 6ths
+        4: 0.9,  # major 3rds/minor 6ths
+        5: 1.1,  # perfect 4ths/5ths
+        6: 0.7   # tritones
+    }
+}
+
+# Generate the sequence with weighted intervals
+sequence = generate_sequence_from_config(config)
+```
+
+### Monte Carlo Simulations with Interval Weights
+
+```bash
+# Run a Monte Carlo simulation with a specific interval profile
+python monte_carlo.py --num-simulations 50 --base-config configs/chord_progression.yaml --interval-weight-profile consonant
+
+# Generate random interval weights for each simulation
+python monte_carlo.py --num-simulations 50 --random-weights --weight-variation 0.7
+
+# Cycle through all available interval weight profiles
+python monte_carlo.py --num-simulations 50 --weight-cycling
+
+# Generate a correlation report between weights and musical features
+python monte_carlo.py --num-simulations 100 --random-weights --correlation-report
+```
+
+### Analyzing Weight Correlations
+
+```python
+import json
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load the weight correlation report
+with open('datasets/weight_correlation_report.json', 'r') as f:
+    correlations = json.load(f)
+
+# Create a heatmap of interval correlations for melodic features
+melodic_corr = correlations['melodic']
+corr_data = []
+for metric, values in melodic_corr.items():
+    row = [values[f'interval_{i}'] for i in range(1, 7)]
+    corr_data.append(row)
+
+plt.figure(figsize=(10, 8))
+sns.heatmap(
+    corr_data, 
+    annot=True, 
+    xticklabels=['min 2nd', 'maj 2nd', 'min 3rd', 'maj 3rd', 'P4/P5', 'tritone'],
+    yticklabels=list(melodic_corr.keys()),
+    cmap='coolwarm'
+)
+plt.title('Correlations: Interval Weights vs. Melodic Features')
+plt.tight_layout()
+plt.savefig('interval_correlations.png')
 ```
 
 ## Advanced Examples
@@ -311,6 +400,68 @@ generate_variations_dataset(
 )
 ```
 
+### Creating Custom Interval Weight Profiles
+
+```yaml
+# configs/my_weight_profile.yaml
+# Emphasize minor thirds and perfect fourths/fifths
+interval_weights:
+  1: 0.6   # de-emphasize minor 2nds/major 7ths
+  2: 0.8   # slightly de-emphasize major 2nds/minor 7ths
+  3: 1.7   # strongly emphasize minor 3rds/major 6ths
+  4: 0.9   # slightly de-emphasize major 3rds/minor 6ths
+  5: 1.5   # emphasize perfect 4ths/5ths
+  6: 0.4   # strongly de-emphasize tritones
+```
+
+```python
+# Load custom weight profile and use it
+import yaml
+from pc_sets.engine import generate_sequence_from_config
+
+with open('configs/my_weight_profile.yaml', 'r') as f:
+    weight_config = yaml.safe_load(f)
+
+config = {
+    "start_pc": [0, 3, 7],  # C minor
+    "generation_type": "chordal",
+    "sequence_length": 8,
+    "progression_type": "random",
+    "interval_weights": weight_config["interval_weights"]
+}
+
+sequence = generate_sequence_from_config(config)
+```
+
+### Exploring Different Harmonic Characters with Weights
+
+```python
+from pc_sets.pitch_classes import PitchClassSet, INTERVAL_WEIGHT_PROFILES
+from pc_sets.engine import generate_sequence_from_config
+
+# Define two different chord sets
+cmajor = PitchClassSet([0, 4, 7])
+cminor = PitchClassSet([0, 3, 7])
+
+# Compare their weighted similarity with different profiles
+for profile_name, weights in INTERVAL_WEIGHT_PROFILES.items():
+    similarity = cmajor.interval_similarity(cminor, weights)
+    print(f"{profile_name} similarity: {similarity:.4f}")
+
+# Generate sequences with different profiles to compare character
+sequences = {}
+for profile_name in INTERVAL_WEIGHT_PROFILES:
+    config = {
+        "start_pc": [0, 4, 7],  # C major
+        "generation_type": "chordal",
+        "sequence_length": 8,
+        "progression_type": "random",
+        "randomness_factor": 0.4,
+        "interval_weights": profile_name
+    }
+    sequences[profile_name] = generate_sequence_from_config(config)
+```
+
 ## Logging
 
 The system includes a comprehensive logging mechanism to track operations and debug issues. Logs are written to both console and files in the `logs/` directory.
@@ -332,6 +483,7 @@ The modular design allows for easy extension:
 3. Extend `PitchClassSet` with additional music theory concepts in `pitch_classes.py`
 4. Add new MIDI features in `midi/translator.py`
 5. Add custom analysis metrics to `MonteCarloSimulator._analyze_sequence()`
+6. Create new interval weight profiles in `INTERVAL_WEIGHT_PROFILES`
 
 ## Requirements
 

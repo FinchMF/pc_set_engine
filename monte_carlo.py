@@ -53,6 +53,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from utils import get_logger
 from pc_sets.engine import EXAMPLE_CONFIG, generate_sequence_from_config
+from pc_sets.pitch_classes import INTERVAL_WEIGHT_PROFILES
 from midi import sequence_to_midi
 
 # Initialize logger
@@ -77,7 +78,10 @@ class MonteCarloSimulator:
         num_simulations: int = 100,
         base_config_file: Optional[str] = None,
         param_ranges: Optional[Dict[str, Tuple[float, float]]] = None,
-        output_dir: str = "datasets"
+        output_dir: str = "datasets",
+        interval_weight_configs: Optional[List[Dict[int, float]]] = None,
+        generate_random_weights: bool = False,
+        weight_variation_factor: float = 0.5
     ):
         """Initialize the Monte Carlo simulator.
         
@@ -86,9 +90,26 @@ class MonteCarloSimulator:
             base_config_file: Path to a YAML file with base configuration (optional)
             param_ranges: Dictionary mapping parameter names to (min, max) tuples
             output_dir: Directory to store output files
+            interval_weight_configs: List of interval weight configurations to cycle through
+                during simulations. Each config is a dictionary mapping interval classes (1-6)
+                to weight factors.
+            generate_random_weights: If True, generate random interval weights for each simulation
+            weight_variation_factor: Controls the amount of variation in random weights (0.0-1.0)
         """
         self.num_simulations = num_simulations
         self.output_dir = output_dir
+        self.generate_random_weights = generate_random_weights
+        self.weight_variation_factor = max(0.0, min(1.0, weight_variation_factor))
+        
+        # Initialize interval weight configurations
+        if interval_weight_configs:
+            self.interval_weight_configs = interval_weight_configs
+        elif generate_random_weights:
+            # We'll generate them on-the-fly during simulation
+            self.interval_weight_configs = None
+        else:
+            # Use predefined profiles as defaults
+            self.interval_weight_configs = list(INTERVAL_WEIGHT_PROFILES.values())
         
         # Load base configuration
         if base_config_file:
@@ -142,6 +163,25 @@ class MonteCarloSimulator:
             logger.error(f"Failed to load configuration from {config_file}: {e}")
             raise
     
+    def generate_random_interval_weights(self) -> Dict[int, float]:
+        """Generate random interval weights.
+        
+        The weights are centered around 1.0, with variation determined by
+        the weight_variation_factor. Higher variation factors result in
+        greater differences between weights.
+        
+        Returns:
+            Dict mapping interval classes (1-6) to weight factors
+        """
+        # Variation range depends on the weight variation factor
+        var_range = 0.2 + (self.weight_variation_factor * 1.3)  # Range: 0.2-1.5
+        
+        # Generate weights centered around 1.0
+        return {
+            i: max(0.1, random.uniform(1.0 - var_range, 1.0 + var_range))
+            for i in range(1, 7)
+        }
+    
     def generate_random_config(self) -> Dict:
         """Generate a random configuration based on parameter ranges.
         
@@ -189,6 +229,15 @@ class MonteCarloSimulator:
             # If not directed, remove target_pc
             if config["progression_type"] != "directed":
                 config.pop("target_pc", None)
+        
+        # Add interval weights if configured
+        if self.generate_random_weights:
+            # Generate new random weights for this simulation
+            config["interval_weights"] = self.generate_random_interval_weights()
+        elif self.interval_weight_configs:
+            # Cycle through provided weight configurations
+            config_index = random.randint(0, len(self.interval_weight_configs) - 1)
+            config["interval_weights"] = self.interval_weight_configs[config_index]
         
         return config
     
@@ -243,8 +292,8 @@ class MonteCarloSimulator:
                     logger.error(f"Failed to generate MIDI for simulation {simulation_id}: {e}")
                     midi_path = None
             
-            # Return simulation result
-            return {
+            # Return simulation result with interval weights information
+            result = {
                 "id": simulation_id,
                 "config": config,
                 "sequence": sequence,
@@ -253,6 +302,12 @@ class MonteCarloSimulator:
                 "statistics": stats,
                 "success": True
             }
+            
+            # Include interval weights in the result if used
+            if "interval_weights" in config:
+                result["interval_weights"] = config["interval_weights"]
+                
+            return result
         
         except Exception as e:
             logger.error(f"Simulation {simulation_id} failed: {e}")
@@ -315,6 +370,30 @@ class MonteCarloSimulator:
                     pc_changes.append(changes)
                 
                 stats["mean_pc_changes"] = float(np.mean(pc_changes))
+        
+        # Additional analysis based on interval content
+        if generation_type == "chordal" and len(sequence) > 0:
+            # Check if weighted interval characteristics match our expectations
+            # This can be useful for validating whether interval weights affected the output
+            try:
+                from pc_sets.pitch_classes import PitchClassSet
+                
+                # Analyze the interval content of the first and last chords
+                first_chord = PitchClassSet(sequence[0])
+                last_chord = PitchClassSet(sequence[-1])
+                
+                # Get interval profiles
+                stats["first_chord_profile"] = first_chord.get_interval_profile()
+                stats["last_chord_profile"] = last_chord.get_interval_profile()
+                
+                # Calculate profile difference between first and last chord
+                dissonance_change = stats["last_chord_profile"]["dissonance_ratio"] - stats["first_chord_profile"]["dissonance_ratio"]
+                consonance_change = stats["last_chord_profile"]["consonance_ratio"] - stats["first_chord_profile"]["consonance_ratio"]
+                
+                stats["dissonance_change"] = float(dissonance_change)
+                stats["consonance_change"] = float(consonance_change)
+            except Exception as e:
+                logger.warning(f"Could not perform interval profile analysis: {e}")
         
         return stats
     
@@ -415,6 +494,13 @@ class MonteCarloSimulator:
                     row[key] = value
                     all_fields.add(key)
                 
+                # Add interval weights information if available
+                if "interval_weights" in sim:
+                    for interval, weight in sim["interval_weights"].items():
+                        key = f"weight_interval_{interval}"
+                        row[key] = weight
+                        all_fields.add(key)
+                
                 rows.append(row)
         
         try:
@@ -442,6 +528,100 @@ class MonteCarloSimulator:
         except Exception as e:
             logger.error(f"Failed to export stats: {e}")
             raise
+    
+    def generate_weight_correlation_report(self, output_path: str = None) -> Dict:
+        """Generate a report analyzing correlations between interval weights and musical characteristics.
+        
+        This report can help understand how different interval weightings affect the 
+        generated music in the Monte Carlo simulation.
+        
+        Args:
+            output_path: Path where to save the JSON report (optional)
+        
+        Returns:
+            Dictionary containing the correlation data
+        """
+        # Initialize correlation data
+        correlation_data = {
+            "melodic": {},
+            "chordal": {}
+        }
+        
+        # Collect data points
+        melodic_data = []
+        chordal_data = []
+        
+        for sim in self.dataset["simulations"]:
+            if not sim["success"] or "interval_weights" not in sim:
+                continue
+            
+            weights = sim["interval_weights"]
+            stats = sim["statistics"]
+            gen_type = sim["config"]["generation_type"]
+            
+            data_point = {
+                f"weight_{i}": weights.get(str(i), weights.get(i, 1.0))
+                for i in range(1, 7)
+            }
+            
+            # Add statistics
+            for key, value in stats.items():
+                if isinstance(value, (int, float)):
+                    data_point[key] = value
+            
+            # Add to the appropriate dataset
+            if gen_type == "melodic":
+                melodic_data.append(data_point)
+            else:
+                chordal_data.append(data_point)
+        
+        # Calculate correlations for melodic sequences
+        if melodic_data:
+            try:
+                import pandas as pd
+                df = pd.DataFrame(melodic_data)
+                
+                # Identify metrics to correlate with weights
+                metrics = [col for col in df.columns if not col.startswith('weight_')]
+                
+                for metric in metrics:
+                    correlation_data["melodic"][metric] = {}
+                    for i in range(1, 7):
+                        weight_key = f"weight_{i}"
+                        if weight_key in df.columns:
+                            corr = df[weight_key].corr(df[metric])
+                            correlation_data["melodic"][metric][f"interval_{i}"] = float(corr)
+            except ImportError:
+                logger.warning("Pandas not available for correlation analysis")
+        
+        # Calculate correlations for chordal sequences
+        if chordal_data:
+            try:
+                import pandas as pd
+                df = pd.DataFrame(chordal_data)
+                
+                metrics = [col for col in df.columns if not col.startswith('weight_')]
+                
+                for metric in metrics:
+                    correlation_data["chordal"][metric] = {}
+                    for i in range(1, 7):
+                        weight_key = f"weight_{i}"
+                        if weight_key in df.columns:
+                            corr = df[weight_key].corr(df[metric])
+                            correlation_data["chordal"][metric][f"interval_{i}"] = float(corr)
+            except ImportError:
+                logger.warning("Pandas not available for correlation analysis")
+        
+        # Save the report if requested
+        if output_path:
+            try:
+                with open(output_path, 'w') as f:
+                    json.dump(correlation_data, f, indent=2)
+                logger.info(f"Weight correlation report saved to {output_path}")
+            except Exception as e:
+                logger.error(f"Failed to save weight correlation report: {e}")
+        
+        return correlation_data
 
 
 def generate_variations_dataset(
@@ -449,7 +629,8 @@ def generate_variations_dataset(
     param_name: str,
     values: List[float],
     samples_per_value: int = 10,
-    output_dir: str = "variation_dataset"
+    output_dir: str = "variation_dataset",
+    interval_weight_profile: Optional[str] = None
 ) -> str:
     """Generate a dataset by varying a single parameter through a range of values.
     
@@ -469,6 +650,13 @@ def generate_variations_dataset(
     # Load base configuration
     with open(base_config_file, 'r') as f:
         base_config = yaml.safe_load(f)
+    
+    # Apply interval weight profile if specified
+    if interval_weight_profile:
+        if interval_weight_profile in INTERVAL_WEIGHT_PROFILES:
+            base_config["interval_weights"] = interval_weight_profile
+        else:
+            logger.warning(f"Unknown interval weight profile '{interval_weight_profile}', using default")
     
     # Create dataset structure
     dataset = {
@@ -555,6 +743,21 @@ def main():
     parser.add_argument('--samples-per-value', type=int, default=5,
                       help='Number of samples to generate for each parameter value')
     
+    parser.add_argument('--interval-weight-profile', type=str, choices=list(INTERVAL_WEIGHT_PROFILES.keys()),
+                      help='Use a specific interval weight profile for all simulations')
+    
+    parser.add_argument('--random-weights', action='store_true',
+                      help='Generate random interval weights for each simulation')
+    
+    parser.add_argument('--weight-variation', type=float, default=0.5,
+                      help='Amount of variation in random weights (0.0-1.0)')
+    
+    parser.add_argument('--weight-cycling', action='store_true',
+                      help='Cycle through all available interval weight profiles')
+    
+    parser.add_argument('--correlation-report', action='store_true',
+                      help='Generate a correlation report between weights and musical features')
+    
     args = parser.parse_args()
     
     # Configuration validation
@@ -568,25 +771,57 @@ def main():
         if args.variation_mode:
             # Run variation mode
             values = np.linspace(args.param_min, args.param_max, args.param_steps)
-            output_file = generate_variations_dataset(
-                args.base_config,
-                args.param_name,
-                values.tolist(),
-                args.samples_per_value,
-                args.output_dir
-            )
+            
+            # Add interval weight profile if specified
+            if args.interval_weight_profile:
+                output_file = generate_variations_dataset(
+                    args.base_config,
+                    args.param_name,
+                    values.tolist(),
+                    args.samples_per_value,
+                    args.output_dir,
+                    args.interval_weight_profile
+                )
+            else:
+                output_file = generate_variations_dataset(
+                    args.base_config,
+                    args.param_name,
+                    values.tolist(),
+                    args.samples_per_value,
+                    args.output_dir
+                )
             print(f"Variation dataset saved to: {output_file}")
         else:
+            # Setup for interval weights
+            interval_weight_configs = None
+            generate_random_weights = args.random_weights
+            
+            if args.interval_weight_profile:
+                # Use specific profile for all simulations
+                interval_weight_configs = [INTERVAL_WEIGHT_PROFILES[args.interval_weight_profile]]
+            elif args.weight_cycling:
+                # Use all available profiles
+                interval_weight_configs = list(INTERVAL_WEIGHT_PROFILES.values())
+            
             # Run Monte Carlo simulation
             simulator = MonteCarloSimulator(
                 num_simulations=args.num_simulations,
                 base_config_file=args.base_config,
-                output_dir=args.output_dir
+                output_dir=args.output_dir,
+                interval_weight_configs=interval_weight_configs,
+                generate_random_weights=generate_random_weights,
+                weight_variation_factor=args.weight_variation
             )
             
             dataset = simulator.run(parallel=not args.no_parallel)
             json_file = simulator.save_dataset()
             csv_file = simulator.export_stats_to_csv()
+            
+            # Generate correlation report if requested
+            if args.correlation_report:
+                report_path = os.path.join(args.output_dir, "weight_correlation_report.json")
+                simulator.generate_weight_correlation_report(report_path)
+                print(f"- Weight correlation report: {report_path}")
             
             print(f"Monte Carlo simulation completed:")
             print(f"- JSON dataset: {json_file}")

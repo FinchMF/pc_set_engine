@@ -1,0 +1,81 @@
+# Interval weight configurations for Monte Carlo simulations
+
+# Set of configurations to use for simulating different musical characters
+weight_configurations:
+  # The standard configuration with all intervals weighted equally
+  - name: "neutral"
+    weights:
+      1: 1.0  # minor 2nds/major 7ths
+      2: 1.0  # major 2nds/minor 7ths
+      3: 1.0  # minor 3rds/major 6ths
+      4: 1.0  # major 3rds/minor 6ths
+      5: 1.0  # perfect 4ths/5ths
+      6: 1.0  # tritones
+  
+  # Highly consonant configuration for traditional harmony
+  - name: "highly_consonant"
+    weights:
+      1: 0.3  # de-emphasize minor 2nds/major 7ths
+      2: 0.7  # slightly de-emphasize major 2nds/minor 7ths
+      3: 1.8  # strongly emphasize minor 3rds/major 6ths
+      4: 1.8  # strongly emphasize major 3rds/minor 6ths
+      5: 1.5  # emphasize perfect 4ths/5ths
+      6: 0.2  # strongly de-emphasize tritones
+  
+  # Dissonant configuration for modern/avant-garde material
+  - name: "highly_dissonant"
+    weights:
+      1: 2.0  # strongly emphasize minor 2nds/major 7ths
+      2: 1.0  # neutral on major 2nds/minor 7ths
+      3: 0.6  # de-emphasize minor 3rds/major 6ths
+      4: 0.6  # de-emphasize major 3rds/minor 6ths
+      5: 0.5  # de-emphasize perfect 4ths/5ths
+      6: 2.0  # strongly emphasize tritones
+  
+  # Jazz-influenced configuration
+  - name: "jazz"
+    weights:
+      1: 1.1  # slightly emphasize minor 2nds/major 7ths
+      2: 1.2  # emphasize major 2nds/minor 7ths
+      3: 1.4  # strongly emphasize minor 3rds/major 6ths
+      4: 1.3  # emphasize major 3rds/minor 6ths
+      5: 0.7  # de-emphasize perfect 4ths/5ths
+      6: 1.2  # emphasize tritones
+  
+  # Quartal harmony configuration
+  - name: "quartal"
+    weights:
+      1: 0.5  # de-emphasize minor 2nds/major 7ths
+      2: 0.9  # slightly de-emphasize major 2nds/minor 7ths
+      3: 0.5  # de-emphasize minor 3rds/major 6ths
+      4: 0.5  # de-emphasize major 3rds/minor 6ths
+      5: 2.5  # strongly emphasize perfect 4ths/5ths
+      6: 0.8  # slightly de-emphasize tritones
+  
+  # Semitone cluster configuration
+  - name: "clusters"
+    weights:
+      1: 2.5  # strongly emphasize minor 2nds/major 7ths
+      2: 1.2  # emphasize major 2nds/minor 7ths
+      3: 0.5  # de-emphasize minor 3rds/major 6ths
+      4: 0.5  # de-emphasize major 3rds/minor 6ths
+      5: 0.7  # de-emphasize perfect 4ths/5ths
+      6: 1.0  # neutral on tritones
+
+# Sequence of configurations for studies that cycle through weights
+weight_sequences:
+  # A sequence that gradually moves from consonant to dissonant
+  consonant_to_dissonant:
+    - "neutral"
+    - "highly_consonant"
+    - "jazz"
+    - "quartal"
+    - "clusters"
+    - "highly_dissonant"
+  
+  # A sequence for jazz-influenced progressions
+  jazz_sequence:
+    - "neutral"
+    - "jazz"
+    - "quartal"
+    - "jazz"
