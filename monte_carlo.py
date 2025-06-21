@@ -54,7 +54,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import get_logger
 from pc_sets.engine import EXAMPLE_CONFIG, generate_sequence_from_config
 from pc_sets.pitch_classes import INTERVAL_WEIGHT_PROFILES
-from midi import sequence_to_midi
+from pc_sets.rhythm import EXAMPLE_RHYTHM_CONFIG, SubdivisionType, AccentType
+from midi import sequence_to_midi, sequence_to_midi_with_rhythm
 
 # Initialize logger
 logger = get_logger(__name__, log_file="monte_carlo.log")
@@ -81,7 +82,10 @@ class MonteCarloSimulator:
         output_dir: str = "datasets",
         interval_weight_configs: Optional[List[Dict[int, float]]] = None,
         generate_random_weights: bool = False,
-        weight_variation_factor: float = 0.5
+        weight_variation_factor: float = 0.5,
+        rhythm_config_file: Optional[str] = None,
+        rhythm_param_ranges: Optional[Dict[str, Tuple[float, float]]] = None,
+        use_rhythm: bool = False
     ):
         """Initialize the Monte Carlo simulator.
         
@@ -95,11 +99,36 @@ class MonteCarloSimulator:
                 to weight factors.
             generate_random_weights: If True, generate random interval weights for each simulation
             weight_variation_factor: Controls the amount of variation in random weights (0.0-1.0)
+            rhythm_config_file: Path to a YAML file with rhythm configuration
+            rhythm_param_ranges: Dictionary mapping rhythm parameter names to (min, max) tuples
+            use_rhythm: Whether to apply rhythm to the generated sequences
         """
         self.num_simulations = num_simulations
         self.output_dir = output_dir
         self.generate_random_weights = generate_random_weights
         self.weight_variation_factor = max(0.0, min(1.0, weight_variation_factor))
+        
+        # Initialize rhythm-related attributes
+        self.use_rhythm = use_rhythm  # Add this line to fix the error
+        self.rhythm_param_ranges = rhythm_param_ranges or {
+            "subdivision": (2, 8),
+            "variation_probability": (0.1, 0.8),
+            "shift_probability": (0.0, 0.5)
+        }
+        
+        # Load rhythm configuration if provided
+        self.rhythm_config = None
+        if rhythm_config_file:
+            try:
+                with open(rhythm_config_file, 'r') as f:
+                    self.rhythm_config = yaml.safe_load(f)
+                logger.info(f"Loaded rhythm configuration from {rhythm_config_file}")
+            except Exception as e:
+                logger.error(f"Failed to load rhythm configuration from {rhythm_config_file}: {e}")
+                self.rhythm_config = EXAMPLE_RHYTHM_CONFIG.copy()
+        elif use_rhythm:
+            # Use default rhythm config if not provided but rhythm is enabled
+            self.rhythm_config = EXAMPLE_RHYTHM_CONFIG.copy()
         
         # Initialize interval weight configurations
         if interval_weight_configs:
@@ -239,6 +268,36 @@ class MonteCarloSimulator:
             config_index = random.randint(0, len(self.interval_weight_configs) - 1)
             config["interval_weights"] = self.interval_weight_configs[config_index]
         
+        # Add rhythm parameters if enabled
+        if self.use_rhythm:
+            rhythm_config = self.rhythm_config.copy() if self.rhythm_config else {}
+            
+            # Randomize continuous rhythm parameters
+            for param, (min_val, max_val) in self.rhythm_param_ranges.items():
+                if param in rhythm_config and isinstance(rhythm_config[param], (int, float)):
+                    if isinstance(rhythm_config[param], int):
+                        rhythm_config[param] = random.randint(int(min_val), int(max_val))
+                    else:
+                        rhythm_config[param] = random.uniform(min_val, max_val)
+            
+            # Randomly select subdivision type
+            if random.random() < 0.7: # 70% chance to vary subdivision type
+                subdivision_types = ["regular", "swing", "dotted", "shuffle", "complex"]
+                rhythm_config["subdivision_type"] = random.choice(subdivision_types)
+            
+            # Randomly select accent type
+            if random.random() < 0.7: # 70% chance to vary accent type
+                accent_types = ["downbeat", "offbeat", "syncopated"]
+                rhythm_config["accent_type"] = random.choice(accent_types)
+                
+            # Randomly select time signature
+            if random.random() < 0.5: # 50% chance to vary time signature
+                common_time_sigs = [(4, 4), (3, 4), (6, 8), (5, 4), (7, 8)]
+                rhythm_config["time_signature"] = random.choice(common_time_sigs)
+            
+            # Add to configuration
+            config["rhythm"] = rhythm_config
+        
         return config
     
     def _run_single_simulation(self, simulation_id: int) -> Dict:
@@ -257,8 +316,17 @@ class MonteCarloSimulator:
         start_time = time.time()
         
         try:
+            # If using rhythm, separate it from the main config before generation
+            rhythm_config = None
+            if self.use_rhythm and "rhythm" in config:
+                rhythm_config = config.pop("rhythm")
+            
             # Generate sequence
             sequence = generate_sequence_from_config(config)
+            
+            # Put rhythm back for the result
+            if rhythm_config:
+                config["rhythm"] = rhythm_config
             
             # Record execution time
             execution_time = time.time() - start_time
@@ -283,15 +351,27 @@ class MonteCarloSimulator:
                     
                     if hasattr(self, 'midi_properties') and self.midi_properties:
                         midi_params.update(self.midi_properties)
-                        
-                    sequence_to_midi(
-                        sequence, midi_path, is_melodic=is_melodic,
-                        params=midi_params
-                    )
+                    
+                    # Apply rhythm if enabled
+                    if self.use_rhythm and "rhythm" in config:
+                        sequence_to_midi_with_rhythm(
+                            sequence, 
+                            midi_path, 
+                            is_melodic=is_melodic,
+                            rhythm_config=config["rhythm"],
+                            params=midi_params
+                        )
+                    else:
+                        sequence_to_midi(
+                            sequence, 
+                            midi_path, 
+                            is_melodic=is_melodic,
+                            params=midi_params
+                        )
                 except Exception as e:
                     logger.error(f"Failed to generate MIDI for simulation {simulation_id}: {e}")
                     midi_path = None
-            
+
             # Return simulation result with interval weights information
             result = {
                 "id": simulation_id,
@@ -306,7 +386,11 @@ class MonteCarloSimulator:
             # Include interval weights in the result if used
             if "interval_weights" in config:
                 result["interval_weights"] = config["interval_weights"]
-                
+            
+            # Include rhythm configuration in the result if used
+            if self.use_rhythm and "rhythm" in config:
+                result["rhythm_config"] = config["rhythm"]
+        
             return result
         
         except Exception as e:
@@ -394,6 +478,26 @@ class MonteCarloSimulator:
                 stats["consonance_change"] = float(consonance_change)
             except Exception as e:
                 logger.warning(f"Could not perform interval profile analysis: {e}")
+        
+        # Add rhythm analysis if available
+        if hasattr(self, 'rhythm_config') and self.rhythm_config:
+            try:
+                # Calculate rhythmic complexity metrics
+                if generation_type == "melodic":
+                    # Estimate rhythmic density and syncopation based on subdivision
+                    subdivision = self.rhythm_config.get("subdivision", 4)
+                    stats["estimated_rhythm_density"] = min(1.0, subdivision / 8)
+                    
+                    # Estimate syncopation based on accent type
+                    accent_type = self.rhythm_config.get("accent_type", "downbeat")
+                    if accent_type == "syncopated":
+                        stats["estimated_syncopation"] = 0.8
+                    elif accent_type == "offbeat":
+                        stats["estimated_syncopation"] = 0.6
+                    else:
+                        stats["estimated_syncopation"] = 0.2
+            except Exception as e:
+                logger.warning(f"Could not perform rhythm analysis: {e}")
         
         return stats
     
@@ -500,6 +604,16 @@ class MonteCarloSimulator:
                         key = f"weight_interval_{interval}"
                         row[key] = weight
                         all_fields.add(key)
+                
+                # Add rhythm information if available
+                if self.use_rhythm and "rhythm_config" in sim:
+                    rhythm_config = sim["rhythm_config"]
+                    for key, value in rhythm_config.items():
+                        # Skip complex data structures that can't be easily represented in CSV
+                        if isinstance(value, (int, float, str)):
+                            key_name = f"rhythm_{key}"
+                            row[key_name] = value
+                            all_fields.add(key_name)
                 
                 rows.append(row)
         
@@ -623,7 +737,193 @@ class MonteCarloSimulator:
         
         return correlation_data
 
+    def export_training_dataset(self, dataset_dir: str = "training_dataset") -> str:
+        """Export the simulation results as a training dataset.
+        
+        Creates a structured dataset where each MIDI file is associated with its
+        configuration parameters as labels. This format facilitates machine learning
+        applications that learn relationships between parameters and musical output.
+        
+        Args:
+            dataset_dir: Directory to store the dataset
+            
+        Returns:
+            Path to the saved dataset metadata file
+        """
+        output_dir = os.path.join(self.output_dir, dataset_dir)
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Create dataset structure
+        dataset = {
+            "metadata": {
+                "generated_at": datetime.now().isoformat(),
+                "num_samples": 0,
+                "parameter_space": {},
+                "feature_types": {}
+            },
+            "samples": []
+        }
+        
+        # Track parameter ranges for all numeric parameters
+        param_values = {}
+        
+        # Process each successful simulation
+        for sim in self.dataset["simulations"]:
+            if not sim["success"] or "midi_file" not in sim or not sim["midi_file"]:
+                continue
+            
+            # Create a unique filename for this sample
+            midi_filename = f"sample_{sim['id']}.mid"
+            new_midi_path = os.path.join(output_dir, midi_filename)
+            
+            # Copy the MIDI file to dataset directory
+            try:
+                import shutil
+                shutil.copy2(sim["midi_file"], new_midi_path)
+                
+                # Create feature vector from configuration
+                features = self._extract_features(sim)
+                
+                # Update parameter ranges
+                for name, value in features.items():
+                    if isinstance(value, (int, float)):
+                        if name not in param_values:
+                            param_values[name] = []
+                        param_values[name].append(value)
+                
+                # Add to dataset
+                dataset["samples"].append({
+                    "midi_file": midi_filename,
+                    "features": features,
+                    "statistics": sim["statistics"],
+                    "id": sim["id"]
+                })
+                
+                # Update sample count
+                dataset["metadata"]["num_samples"] += 1
+                
+            except Exception as e:
+                logger.error(f"Failed to process sample {sim['id']}: {e}")
+        
+        # Calculate parameter space information
+        for param, values in param_values.items():
+            if values:
+                dataset["metadata"]["parameter_space"][param] = {
+                    "min": min(values),
+                    "max": max(values),
+                    "mean": sum(values) / len(values),
+                    "values": sorted(list(set(values))) if len(set(values)) < 10 else None
+                }
+        
+        # Determine feature types
+        if dataset["samples"]:
+            first_sample = dataset["samples"][0]["features"]
+            for name, value in first_sample.items():
+                if isinstance(value, bool):
+                    dataset["metadata"]["feature_types"][name] = "boolean"
+                elif isinstance(value, int):
+                    dataset["metadata"]["feature_types"][name] = "integer"
+                elif isinstance(value, float):
+                    dataset["metadata"]["feature_types"][name] = "float"
+                elif isinstance(value, str):
+                    dataset["metadata"]["feature_types"][name] = "categorical"
+                elif isinstance(value, list):
+                    dataset["metadata"]["feature_types"][name] = "array"
+                elif isinstance(value, tuple):
+                    dataset["metadata"]["feature_types"][name] = "tuple"
+        
+        # Save dataset metadata
+        metadata_path = os.path.join(output_dir, "dataset.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(dataset, f, indent=2)
+        
+        # Create a CSV version for easier import into ML frameworks
+        csv_path = os.path.join(output_dir, "dataset.csv")
+        self._export_dataset_csv(dataset, csv_path)
+        
+        logger.info(f"Training dataset with {dataset['metadata']['num_samples']} samples exported to {output_dir}")
+        return metadata_path
 
+    def _extract_features(self, simulation: Dict) -> Dict:
+        """Extract feature vector from simulation configuration.
+        
+        Args:
+            simulation: A simulation result dictionary
+            
+        Returns:
+            Dict of features extracted from the configuration
+        """
+        features = {}
+        
+        # Include generation parameters
+        config = simulation["config"]
+        features["generation_type"] = config["generation_type"]
+        features["sequence_length"] = config["sequence_length"]
+        features["randomness_factor"] = config["randomness_factor"]
+        features["variation_probability"] = config["variation_probability"]
+        features["progression"] = config.get("progression", False)
+        features["progression_type"] = config.get("progression_type", "static")
+        
+        # Include rhythm parameters if available
+        if "rhythm_config" in simulation:
+            rhythm = simulation["rhythm_config"]
+            
+            # Add each rhythm parameter
+            for key, value in rhythm.items():
+                # Handle time signature specially since it's a tuple
+                if key == "time_signature" and isinstance(value, tuple):
+                    features["rhythm_time_signature_numerator"] = value[0]
+                    features["rhythm_time_signature_denominator"] = value[1]
+                    features["rhythm_time_signature_ratio"] = value[0] / value[1]
+                # Skip complex data structures like accent patterns
+                elif isinstance(value, (int, float, str, bool)):
+                    features[f"rhythm_{key}"] = value
+        
+        # Include interval weights if available
+        if "interval_weights" in simulation:
+            weights = simulation["interval_weights"]
+            for interval, weight in weights.items():
+                features[f"weight_{interval}"] = weight
+        
+        return features
+
+    def _export_dataset_csv(self, dataset: Dict, csv_path: str):
+        """Export dataset to CSV format for ML frameworks.
+        
+        Args:
+            dataset: Dataset dictionary
+            csv_path: Path to save CSV file
+        """
+        # Extract all possible feature names
+        feature_names = set()
+        for sample in dataset["samples"]:
+            feature_names.update(sample["features"].keys())
+        
+        # Sort feature names for consistency
+        feature_names = sorted(list(feature_names))
+        
+        # Create CSV rows
+        rows = []
+        for sample in dataset["samples"]:
+            row = {
+                "midi_file": sample["midi_file"],
+                "id": sample["id"]
+            }
+            
+            # Add each feature
+            for name in feature_names:
+                row[name] = sample["features"].get(name, None)
+            
+            rows.append(row)
+        
+        # Write to CSV
+        with open(csv_path, 'w', newline='') as f:
+            fieldnames = ["midi_file", "id"] + feature_names
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+    
 def generate_variations_dataset(
     base_config_file: str,
     param_name: str,
@@ -709,6 +1009,115 @@ def generate_variations_dataset(
     return output_file
 
 
+def generate_rhythm_variations_dataset(
+    base_config_file: str,
+    rhythm_param_name: str,
+    values: List[float],
+    samples_per_value: int = 10,
+    output_dir: str = "rhythm_variation_dataset"
+) -> str:
+    """Generate a dataset by varying a single rhythm parameter through a range of values."""
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Load base configuration
+    with open(base_config_file, 'r') as f:
+        base_config = yaml.safe_load(f)
+    
+    # Make sure we have a rhythm section
+    if "rhythm" not in base_config:
+        base_config["rhythm"] = EXAMPLE_RHYTHM_CONFIG.copy()
+    
+    # Create dataset structure
+    dataset = {
+        "metadata": {
+            "generated_at": datetime.now().isoformat(),
+            "base_config": base_config,
+            "varied_parameter": f"rhythm.{rhythm_param_name}",
+            "parameter_values": values,
+            "samples_per_value": samples_per_value
+        },
+        "variations": {}
+    }
+    
+    # Generate sequences for each parameter value
+    for value in tqdm(values, desc=f"Varying rhythm.{rhythm_param_name}"):
+        dataset["variations"][str(value)] = []
+        
+        for i in range(samples_per_value):
+            # Create a new configuration with this parameter value
+            config = base_config.copy()
+            rhythm_config = config.get("rhythm", {}).copy()
+            
+            # Handle special cases for certain rhythm parameters
+            if rhythm_param_name == "subdivision_type" and isinstance(value, (int, float)):
+                # Convert numeric index to subdivision type
+                subdivision_types = list(map(str, SubdivisionType))
+                idx = min(int(value) % len(subdivision_types), len(subdivision_types) - 1)
+                rhythm_config[rhythm_param_name] = subdivision_types[idx]
+            elif rhythm_param_name == "accent_type" and isinstance(value, (int, float)):
+                # Convert numeric index to accent type
+                accent_types = list(map(str, AccentType))
+                idx = min(int(value) % len(accent_types), len(accent_types) - 1)
+                rhythm_config[rhythm_param_name] = accent_types[idx]
+            elif rhythm_param_name == "time_signature":
+                # Handle time signature as a special case
+                if isinstance(value, (int, float)):
+                    # Use value as numerator with common denominators
+                    numerator = max(2, min(12, int(value)))
+                    denominator = 4 if numerator % 3 != 0 else 8
+                    rhythm_config[rhythm_param_name] = (numerator, denominator)
+            else:
+                # Regular numeric parameter
+                rhythm_config[rhythm_param_name] = value
+            
+            # Store rhythm config separately from the main config
+            config_for_generation = config.copy()
+            
+            # Remove any properties that shouldn't be passed to GenerationConfig
+            if "rhythm" in config_for_generation:
+                rhythm_for_midi = config_for_generation.pop("rhythm")
+            else:
+                rhythm_for_midi = rhythm_config
+                
+            # Remove midi_properties to avoid passing it to GenerationConfig
+            midi_params = {"tempo": 120, "base_octave": 4}
+            if "midi_properties" in config_for_generation:
+                midi_params.update(config_for_generation.pop("midi_properties"))
+                
+            config["rhythm"] = rhythm_config  # Keep rhythm in the complete config for dataset
+            
+            try:
+                # Generate sequence with the cleaned config
+                sequence = generate_sequence_from_config(config_for_generation)
+                
+                # Save to dataset
+                dataset["variations"][str(value)].append({
+                    "sample_id": i,
+                    "sequence": sequence
+                })
+                
+                # Generate MIDI file with rhythm
+                midi_path = os.path.join(output_dir, f"rhythm_{rhythm_param_name}_{value}_{i}.mid")
+                is_melodic = config_for_generation["generation_type"] == "melodic"
+                sequence_to_midi_with_rhythm(
+                    sequence, midi_path, is_melodic=is_melodic,
+                    rhythm_config=rhythm_for_midi,
+                    params=midi_params
+                )
+                
+            except Exception as e:
+                logger.error(f"Failed to generate rhythm sample for {rhythm_param_name}={value}: {e}")
+    
+    # Save the dataset
+    output_file = os.path.join(output_dir, f"rhythm_{rhythm_param_name}_variations.json")
+    with open(output_file, 'w') as f:
+        json.dump(dataset, f, indent=2)
+    
+    logger.info(f"Rhythm variations dataset saved to {output_file}")
+    return output_file
+
+
 def main():
     """Command-line interface for the Monte Carlo simulator."""
     parser = argparse.ArgumentParser(description="Run Monte Carlo simulations with the pitch class rules engine")
@@ -758,6 +1167,35 @@ def main():
     parser.add_argument('--correlation-report', action='store_true',
                       help='Generate a correlation report between weights and musical features')
     
+    # Add rhythm-related arguments
+    parser.add_argument('--use-rhythm', action='store_true',
+                      help='Apply rhythm patterns to generated sequences')
+    
+    parser.add_argument('--rhythm-config', type=str,
+                      help='Path to rhythm configuration YAML file')
+    
+    parser.add_argument('--rhythm-variation-mode', action='store_true',
+                      help='Enable variation mode to study a single rhythm parameter')
+    
+    parser.add_argument('--rhythm-param-name', type=str,
+                      help='Rhythm parameter name to vary in variation mode')
+    
+    parser.add_argument('--rhythm-param-min', type=float, default=1.0,
+                      help='Minimum value for the varied rhythm parameter')
+    
+    parser.add_argument('--rhythm-param-max', type=float, default=8.0,
+                      help='Maximum value for the varied rhythm parameter')
+    
+    parser.add_argument('--rhythm-param-steps', type=int, default=8,
+                      help='Number of steps between min and max rhythm values')
+    
+    # Add dataset generation argument
+    parser.add_argument('--export-dataset', action='store_true',
+                      help='Export results as a training dataset')
+    
+    parser.add_argument('--dataset-dir', type=str, default='training_dataset',
+                      help='Directory to store the training dataset')
+    
     args = parser.parse_args()
     
     # Configuration validation
@@ -767,8 +1205,25 @@ def main():
     if args.variation_mode and not args.base_config:
         parser.error("--base-config is required with --variation-mode")
     
+    if args.rhythm_variation_mode and not args.rhythm_param_name:
+        parser.error("--rhythm-param-name is required with --rhythm-variation-mode")
+    
+    if args.rhythm_variation_mode and not args.base_config:
+        parser.error("--base-config is required with --rhythm-variation-mode")
+    
     try:
-        if args.variation_mode:
+        if args.rhythm_variation_mode:
+            # Run rhythm variation mode
+            values = np.linspace(args.rhythm_param_min, args.rhythm_param_max, args.rhythm_param_steps)
+            output_file = generate_rhythm_variations_dataset(
+                args.base_config,
+                args.rhythm_param_name,
+                values.tolist(),
+                args.samples_per_value,
+                args.output_dir
+            )
+            print(f"Rhythm variation dataset saved to: {output_file}")
+        elif args.variation_mode:
             # Run variation mode
             values = np.linspace(args.param_min, args.param_max, args.param_steps)
             
@@ -810,12 +1265,19 @@ def main():
                 output_dir=args.output_dir,
                 interval_weight_configs=interval_weight_configs,
                 generate_random_weights=generate_random_weights,
-                weight_variation_factor=args.weight_variation
+                weight_variation_factor=args.weight_variation,
+                rhythm_config_file=args.rhythm_config,
+                use_rhythm=args.use_rhythm
             )
             
             dataset = simulator.run(parallel=not args.no_parallel)
             json_file = simulator.save_dataset()
             csv_file = simulator.export_stats_to_csv()
+            
+            # Generate training dataset if requested
+            if args.export_dataset:
+                dataset_path = simulator.export_training_dataset(args.dataset_dir)
+                print(f"- Training dataset: {dataset_path}")
             
             # Generate correlation report if requested
             if args.correlation_report:
