@@ -43,6 +43,9 @@ pc_rules_engine/
 ├── utils/
 │   ├── __init__.py
 │   └── logging_setup.py   # Logging configuration
+├── analysis/           # Data analysis tools and visualization notebooks
+│   ├── weight_correlation_analysis.md         # Detailed analysis of weight correlations
+│   └── weight_correlation_visualization.ipynb # Interactive visualization notebook
 ├── run_engine.py          # Command-line interface
 ├── monte_carlo.py         # Monte Carlo simulation framework
 └── README.md              # This documentation
@@ -129,6 +132,14 @@ python run_engine.py --config-file configs/melodic_basic.yaml --sequence-length 
 - Support for parallel processing to speed up large simulations
 - Statistical analysis of generated sequences
 - Export data to JSON and CSV for further analysis
+
+### Analysis Tools (`analysis/`)
+
+- Notebooks and scripts for analyzing generated sequences and simulation results
+- Visualizations of correlations between parameters and musical characteristics
+- Statistical analysis of the effects of interval weighting on musical output
+- Tools for interpreting Monte Carlo simulation results
+- Jupyter notebooks for interactive exploration of dataset patterns
 
 ## Usage Examples
 
@@ -303,6 +314,27 @@ plt.title('Correlations: Interval Weights vs. Melodic Features')
 plt.tight_layout()
 plt.savefig('interval_correlations.png')
 ```
+
+### Using Analysis Tools and Notebooks
+
+The `analysis/` directory contains tools for deeper investigation of the engine's behavior:
+
+```bash
+# Run the weight correlation visualization notebook
+jupyter notebook analysis/weight_correlation_visualization.ipynb
+
+# Generate visualizations from the command line
+python -m analysis.generate_visualizations --dataset datasets/monte_carlo_dataset.json --output analysis/figures
+
+# Perform detailed analysis on a correlation report
+python -m analysis.correlation_analyzer weight_correlation.json --output analysis/report.md
+```
+
+Example output from the notebook:
+- Heatmaps showing correlations between interval weights and musical features
+- Recommendations for optimal weight configurations for specific musical styles
+- Statistical significance testing of parameter effects
+- Generated YAML configurations based on analytical insights
 
 ## Advanced Examples
 
@@ -481,9 +513,11 @@ The modular design allows for easy extension:
 1. Add new transformation operations in `PitchClassEngine._apply_random_transformation()`
 2. Create new preset configurations in the `configs/` directory
 3. Extend `PitchClassSet` with additional music theory concepts in `pitch_classes.py`
-4. Add new MIDI features in `midi/translator.py`
+4. Add new MIDI features in `midi/translator.py` 
 5. Add custom analysis metrics to `MonteCarloSimulator._analyze_sequence()`
 6. Create new interval weight profiles in `INTERVAL_WEIGHT_PROFILES`
+7. Develop new visualization tools in the `analysis/` directory
+8. Add custom statistical tests to the analysis notebooks
 
 ## Requirements
 
