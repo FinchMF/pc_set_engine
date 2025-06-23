@@ -1,0 +1,109 @@
+# Dataset configuration for generating a large diverse training dataset
+
+dataset_name: large_diverse_dataset
+description: "A comprehensive dataset covering various musical patterns and configurations"
+version: 1.0
+
+simulation_groups:
+  - name: chordal_major
+    num_simulations: 50
+    base_config: configs/chordal_major.yaml
+    use_rhythm: true
+    param_ranges:
+      randomness_factor: [0.1, 0.9]
+      variation_probability: [0.2, 0.8]
+      sequence_length: [4, 16]
+    rhythm_param_ranges:
+      subdivision: [4, 16]
+      variation_probability: [0.2, 0.7]
+      
+  - name: chordal_minor
+    num_simulations: 50
+    base_config: configs/chordal_minor.yaml
+    use_rhythm: true
+    param_ranges:
+      randomness_factor: [0.1, 0.9]
+      variation_probability: [0.2, 0.8]
+      sequence_length: [4, 16]
+    rhythm_param_ranges:
+      subdivision: [4, 16]
+      variation_probability: [0.2, 0.7]
+      
+  - name: chordal_diminished
+    num_simulations: 40
+    base_config: configs/chordal_diminished.yaml
+    use_rhythm: true
+    param_ranges:
+      randomness_factor: [0.1, 0.9]
+      variation_probability: [0.2, 0.8]
+      sequence_length: [4, 12]
+    rhythm_param_ranges:
+      subdivision: [4, 16]
+      variation_probability: [0.2, 0.7]
+      
+  - name: melodic_directed
+    num_simulations: 60
+    base_config: configs/melodic_directed.yaml
+    use_rhythm: true
+    param_ranges:
+      randomness_factor: [0.2, 0.7]
+      variation_probability: [0.3, 0.7]
+      sequence_length: [8, 32]
+    rhythm_param_ranges:
+      subdivision: [4, 16]
+      subdivision_type: [0, 4]  # Try all subdivision types
+      variation_probability: [0.1, 0.6]
+      
+  - name: melodic_random
+    num_simulations: 60
+    base_config: configs/melodic_random.yaml
+    use_rhythm: true
+    param_ranges:
+      randomness_factor: [0.2, 0.7]
+      variation_probability: [0.3, 0.7]
+      sequence_length: [8, 24]
+    rhythm_param_ranges:
+      subdivision: [4, 16]
+      subdivision_type: [0, 4]  # Try all subdivision types
+      variation_probability: [0.1, 0.6]
+
+  - name: complex_time_signatures
+    num_simulations: 40
+    base_config: configs/complex_time_signatures.yaml
+    use_rhythm: true
+    param_ranges:
+      randomness_factor: [0.1, 0.8]
+      variation_probability: [0.2, 0.8]
+    rhythm_param_ranges:
+      # Change from array of time signatures to simpler structure
+      subdivision: [3, 12]
+      # Remove time_signature from here as it's causing problems
+      
+  - name: chromatic_exploration
+    num_simulations: 30
+    base_config:
+      start_pc: [0, 1, 6]
+      generation_type: "chordal"
+      sequence_length: 10
+      progression: true
+      progression_type: "random"
+      allowed_operations: ["transpose", "invert", "add_note", "remove_note"]
+      constraints:
+        max_interval: 6
+        vary_pc: true
+      randomness_factor: 0.7
+      variation_probability: 0.6
+      interval_weights: "chromatic"
+    use_rhythm: true
+    param_ranges:
+      randomness_factor: [0.4, 0.9]
+    rhythm_param_ranges:
+      subdivision: [8, 16]
+      accent_type: ["syncopated", "offbeat"]
+
+# Global dataset generation settings
+settings:
+  save_midi: true
+  save_stats: true
+  include_raw_data: true
+  analyze_patterns: true

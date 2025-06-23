@@ -1,0 +1,26 @@
+# Base configuration for diminished chord progressions
+
+# Starting pitch class set: C diminished triad [C, E♭, G♭]
+start_pc: [0, 3, 6]
+generation_type: "chordal"
+sequence_length: 8
+progression: true
+progression_type: "random"
+allowed_operations: ["transpose", "invert", "add_note"]
+constraints:
+  max_interval: 4
+  vary_pc: true
+randomness_factor: 0.5
+variation_probability: 0.6
+interval_weights: "dissonant"
+
+# Rhythm configuration
+rhythm:
+  time_signature: [4, 4]
+  subdivision: 8
+  subdivision_type: "regular"
+  accent_type: "downbeat"
+  variation_probability: 0.4
+  shift_probability: 0.2
+  dynamics_range: [0.6, 1.0]
+  tempo: 120
