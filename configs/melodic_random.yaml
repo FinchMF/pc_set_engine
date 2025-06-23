@@ -1,0 +1,25 @@
+# Base configuration for random melodic sequences
+
+start_pc: 0
+generation_type: "melodic"
+sequence_length: 16
+progression: true
+progression_type: "random"
+allowed_operations: ["transpose", "invert", "add_note"]
+constraints:
+  max_interval: 5
+  vary_pc: true
+randomness_factor: 0.6
+variation_probability: 0.5
+interval_weights: "melodic"
+
+# Rhythm configuration
+rhythm:
+  time_signature: [4, 4]
+  subdivision: 8
+  subdivision_type: "regular"
+  accent_type: "downbeat"
+  variation_probability: 0.4
+  shift_probability: 0.2
+  dynamics_range: [0.6, 1.0]
+  tempo: 120

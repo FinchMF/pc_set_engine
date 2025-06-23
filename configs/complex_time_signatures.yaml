@@ -1,0 +1,25 @@
+# Base configuration for sequences with complex time signatures
+
+start_pc: [0, 4, 7]
+generation_type: "chordal"
+sequence_length: 8
+progression: true
+progression_type: "random"
+allowed_operations: ["transpose", "invert", "add_note"]
+constraints:
+  max_interval: 4
+  vary_pc: true
+randomness_factor: 0.5
+variation_probability: 0.6
+interval_weights: "consonant"
+
+# Rhythm configuration
+rhythm:
+  time_signature: [5, 4]  # Default complex time signature
+  subdivision: 10
+  subdivision_type: "complex"
+  accent_type: "downbeat"
+  variation_probability: 0.5
+  shift_probability: 0.3
+  dynamics_range: [0.6, 1.0]
+  tempo: 120

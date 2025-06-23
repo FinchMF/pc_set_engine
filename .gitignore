@@ -9,3 +9,6 @@ datasets/
 weight_studies/
 rhythm_studies/
 training_dataset_example/
+large_training_set/
+fix_dataset.py
+analyze_dataset.py
